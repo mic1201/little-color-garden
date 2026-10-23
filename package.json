@@ -1,0 +1,1 @@
+{"name":"little-color-garden","private":true,"type":"module","scripts":{"test":"node tests.mjs","check":"node --check dist/app.js && node --check dist/engine.js && node --check dist/patterns.js"}}
