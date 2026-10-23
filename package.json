@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests.mjs && node tests-viewport.mjs && node tests-brushes.mjs && node tests-brush-ui.mjs && node tests-ui-integration.mjs && node tests-patterns.mjs && node tests-rainbow.mjs",
+    "test": "node tests.mjs && node tests-viewport.mjs && node tests-brushes.mjs && node tests-brush-ui.mjs && node tests-ui-integration.mjs && node tests-patterns.mjs && node tests-rainbow.mjs && node tests-icon-ui.mjs",
     "check": "node --check dist/app.js && node --check dist/engine.js && node --check dist/patterns.js && node --check dist/viewport.js && node --check dist/brush-ui.js"
   }
 }

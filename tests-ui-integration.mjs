@@ -60,3 +60,12 @@ cv.events.pointerdown(event(21,80,90));cv.events.pointermove(event(21,180,190));
 get('#tools').children.find(b=>b.attrs['aria-label']==='橡皮擦').onclick();cv.events.pointerdown(event(22,80,90));cv.events.pointerup(event(22,80,90));assert.equal(api.getState().strokes.at(-1).rainbow,false);
 get('#colors').children[1].onclick();assert.equal(get('#rainbow-color').attrs['aria-pressed'],'false');api.save();assert(engine.validDocument(JSON.parse([...store.values()][0]),pats.patterns.map(p=>p.id)));
 console.log('PASS 20 presets, customHEX normalization/rejection, rainbow perstroke persistence, eraser and solid reset.');
+for(const b of get('#tools').children){assert.match(b.innerHTML,/sr-only/);assert(b.attrs['aria-label'])}
+for(const b of get('#pattern-categories').children){assert(b.attrs['aria-label']);assert(!/[\u4e00-\u9fff]/.test(b.textContent))}
+for(const b of get('#patterns').children){assert.match(b.innerHTML,/sr-only/);assert(b.attrs['aria-label'])}
+for(const b of get('#background-colors').children){assert(b.attrs['aria-label']);assert(!/[\u4e00-\u9fff]/.test(b.innerHTML))}
+const iconState=JSON.stringify(api.getState());different.onclick();assert.equal(get('#confirm-preview').children.length,3);get('#cancel').onclick();assert.equal(JSON.stringify(api.getState()),iconState);
+await get('#focus-enter').onclick();get('#focus-tools').onclick();assert(!/[\u4e00-\u9fff]/.test(get('#focus-tools').textContent));assert(get('#focus-tools').attrs['aria-label']);await get('#focus-exit').onclick();
+console.log('PASS icon-only generated controls, retained labels, picture confirmation cancel, and focus tool icon.');
+
+const savedSetter=localStorage.setItem;localStorage.setItem=()=>{throw Error('quota')};api.save();assert.equal(get('#storage-warning').hidden,false);get('#storage-warning').onclick();assert.equal(get('#parent-dialog').open,true);assert.match(get('#save-status').textContent,/暫存空間不足/);localStorage.setItem=savedSetter;api.save();assert.equal(get('#storage-warning').hidden,true);console.log('PASS visible storage warning and parent details with recovery.');
