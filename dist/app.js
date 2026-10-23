@@ -1,10 +1,11 @@
+import {fitBoard,createFocusMode} from './viewport.js';
 import {patterns,svgMarkup} from './patterns.js';
 import {W,H,MAX_STROKES,MAX_POINTS,coordinate,drawStroke,validDocument} from './engine.js';
 const $=s=>document.querySelector(s),canvas=$('#ink'),ctx=canvas.getContext('2d'),KEY='little-color-garden-v1';
 const palette=[['#ed7976','草莓紅'],['#f5aa62','橘子橙'],['#f3d36b','陽光黃'],['#8bbf83','嫩葉綠'],['#70b8b1','湖水綠'],['#7ba8d3','天空藍'],['#a89bcc','葡萄紫'],['#e3a0b8','櫻花粉'],['#9f7e69','可可棕'],['#42545b','石頭黑']];
 let state={version:1,pattern:'blank',strokes:[]},redo=[],color=palette[0][0],tool='marker',size=20,active=null,pointer=null,frame=0,saving=0,confirmAction=null,exportUrl=null,restoreMessage='',saveFailed=false;
 try{const raw=localStorage.getItem(KEY);if(raw){const parsed=JSON.parse(raw);if(validDocument(parsed,patterns.map(p=>p.id)))state=parsed;else restoreMessage='舊暫存無法讀取；請另存喜歡的作品。'}}catch{restoreMessage='瀏覽器無法讀取暫存，離開前請儲存圖片。'}
-function render(){frame=0;ctx.clearRect(0,0,W,H);for(const s of state.strokes)drawStroke(ctx,s);if(active)drawStroke(ctx,active);$('#welcome').hidden=state.pattern!=='blank'||state.strokes.length>0||!!active;$('#welcome').style.display=$('#welcome').hidden?'none':'';$('#undo').disabled=!state.strokes.length;$('#redo').disabled=!redo.length}
+function render(){frame=0;ctx.clearRect(0,0,W,H);for(const s of state.strokes)drawStroke(ctx,s);if(active)drawStroke(ctx,active);$('#welcome').hidden=state.pattern!=='blank'||state.strokes.length>0||!!active;$('#welcome').style.display=$('#welcome').hidden?'none':'';$('#undo').disabled=!state.strokes.length;$('#focus-undo').disabled=!state.strokes.length;$('#redo').disabled=!redo.length}
 function schedule(){if(!frame)frame=requestAnimationFrame(render)}
 function save(){clearTimeout(saving);try{localStorage.setItem(KEY,JSON.stringify(state));saveFailed=false;$('#save-status').textContent='✓ 已暫存在這台裝置'}catch{saveFailed=true;$('#save-status').textContent='暫存空間不足，請大人儲存圖片。'}}
 function changed(){render();saving=setTimeout(save,300)}
@@ -24,3 +25,14 @@ $('#parent').onclick=()=>{finish();$('#parent-dialog').showModal()};$('[data-clo
 $('#clear').onclick=()=>{$('#parent-dialog').close();ask('換一張乾淨的紙嗎？','現在的顏色會清掉，圖案保留。請先儲存想留下的作品。',()=>setPattern(state.pattern))};
 $('#export').onclick=async()=>{finish();const b=$('#export');b.disabled=true;b.textContent='正在準備圖片…';try{const output=document.createElement('canvas');output.width=W;output.height=H;const c=output.getContext('2d');c.fillStyle='#fff';c.fillRect(0,0,W,H);c.drawImage(canvas,0,0);const svg=new Blob([svgMarkup(state.pattern)],{type:'image/svg+xml'}),url=URL.createObjectURL(svg),img=new Image();try{await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});c.drawImage(img,0,0,W,H)}finally{URL.revokeObjectURL(url)}const blob=await new Promise(resolve=>output.toBlob(resolve,'image/png'));if(!blob)throw Error();if(exportUrl)URL.revokeObjectURL(exportUrl);exportUrl=URL.createObjectURL(blob);$('#export-preview').replaceChildren();const preview=document.createElement('img');preview.src=exportUrl;preview.alt='完成的畫作，可長按儲存';const a=document.createElement('a');a.href=exportUrl;a.download='我的小小畫作.png';a.textContent='下載圖片（或長按上圖儲存）';$('#export-preview').append(preview,a);a.click();}catch{$('#export-preview').textContent='圖片暫時無法產生，請再試一次。作品仍在畫布上。'}finally{b.disabled=false;b.textContent='↓ 儲存作品 PNG'}};
 $('#outline').innerHTML=svgMarkup(state.pattern);const p=patterns.find(p=>p.id===state.pattern);$('#picture-title').textContent=p.icon+' '+p.name;render();if(restoreMessage)$('#save-status').textContent=restoreMessage;
+
+// Resize only the presentation; vector coordinates and the stored document stay intact.
+const app=$('.app'),board=$('#board'),paper=$('.paper-frame');
+function fit(){const r=paper.getBoundingClientRect();const f=fitBoard(Math.max(1,r.width-8),Math.max(1,r.height-8));board.style.width=f.width+'px';board.style.height=f.height+'px'}
+const focusMode=createFocusMode({root:document.documentElement,doc:document,onChange:({focused,tools,native})=>{finish();document.body.classList.toggle('focus-mode',focused);document.body.classList.toggle('show-focus-tools',focused&&tools);$('.focus-controls').hidden=!focused;$('#focus-label').textContent=native?'全螢幕畫畫':'大畫布模式';$('#focus-tools').textContent=tools?'🎨 收起工具':'🎨 顯示工具';$('#focus-tools').setAttribute('aria-expanded',String(tools));requestAnimationFrame(fit)}});
+$('#focus-enter').onclick=()=>focusMode.enter();$('#focus-exit').onclick=()=>focusMode.exit();$('#focus-tools').onclick=()=>focusMode.toggleTools();$('#focus-undo').onclick=()=>$('#undo').click();
+for(const event of ['fullscreenchange','webkitfullscreenchange'])document.addEventListener(event,()=>focusMode.change());
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&focusMode.getState().focused&&!document.querySelector('dialog[open]'))focusMode.exit()});
+$('#pattern-picker').addEventListener('toggle',()=>{finish();requestAnimationFrame(fit)});
+if(typeof ResizeObserver!=='undefined')new ResizeObserver(()=>{finish();fit()}).observe(paper);
+window.addEventListener('resize',fit);window.visualViewport?.addEventListener('resize',fit);requestAnimationFrame(fit);
