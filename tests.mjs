@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';import {coordinate,validDocument,drawStroke} from './dist/engine.js';import {patterns,svgMarkup}from './dist/patterns.js';
-const ids=patterns.map(p=>p.id);assert.equal(new Set(ids).size,7);for(const id of ids){assert.match(svgMarkup(id),/viewBox="0 0 1000 900"/);assert.match(svgMarkup(id),/fill="none"/)}
+const ids=patterns.map(p=>p.id);assert.equal(new Set(ids).size,ids.length);assert(ids.length>=7);for(const id of ids){assert.match(svgMarkup(id),/viewBox="0 0 1000 900"/);assert.match(svgMarkup(id),/fill="none"/)}
 assert.deepEqual(coordinate(60,65,{left:10,top:20,width:100,height:90}),{x:500,y:450});assert.deepEqual(coordinate(-1,200,{left:0,top:0,width:100,height:90}),{x:0,y:900});
 const doc={version:1,pattern:'cat',strokes:[{tool:'marker',color:'#abcdef',size:20,points:[{x:0,y:0},{x:1000,y:900}]}]};assert(validDocument(doc,ids));for(const bad of [{...doc,pattern:'evil'},{...doc,version:2},{...doc,strokes:[{...doc.strokes[0],points:[{x:NaN,y:0}]}]},{...doc,strokes:[{...doc.strokes[0],color:'red'}]}])assert(!validDocument(bad,ids));
 let ops=[];const ctx=new Proxy({},{set(t,k,v){ops.push([k,v]);t[k]=v;return true},get(t,k){return t[k]||((...a)=>ops.push([k,...a]))}});drawStroke(ctx,{...doc.strokes[0],tool:'eraser'});assert(ops.some(x=>x[0]==='globalCompositeOperation'&&x[1]==='destination-out'));for(const tool of ['marker','crayon','soft'])drawStroke(ctx,{...doc.strokes[0],tool});
-console.log('PASS:7patterns, coordinate scaling/clamping, document validation,4brush render contracts.');
+console.log('PASS:patterns, coordinate scaling/clamping, document validation,4brush render contracts.');

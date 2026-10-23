@@ -29,3 +29,34 @@ for(const mode of ['normal','focus']){
  if(mode==='focus')await get('#focus-exit').onclick();
 }
 console.log('PASS actual app click bindings: all tools, stamp variants, normal/focus mode indicators.');
+const beforePattern=api.getState().pattern;
+cv.events.pointerdown(event(8,60,60));cv.events.pointerup(event(8,60,60));
+const originalStrokes=JSON.stringify(api.getState().strokes);
+get('#background-open').onclick();assert.equal(get('#background-dialog').open,true);
+const pink=get('#background-colors').children[2];pink.onclick();
+assert.equal(api.getState().background,'#fce6ed');assert.equal(get('#board').style.background,'#fce6ed');assert.equal(get('#background-dialog').open,false);
+assert.equal(JSON.stringify(api.getState().strokes),originalStrokes);assert.equal(api.getState().pattern,beforePattern);
+api.save();const bgDoc=JSON.parse([...store.values()][0]);assert.equal(bgDoc.background,'#fce6ed');assert(engine.validDocument(bgDoc,pats.patterns.map(p=>p.id)));
+get('#undo').onclick();assert.equal(engine.backgroundColor(api.getState()),'#ffffff');assert.equal(JSON.stringify(api.getState().strokes),originalStrokes);
+get('#redo').onclick();assert.equal(engine.backgroundColor(api.getState()),'#fce6ed');
+let exportBackground;context.fillRect=()=>{exportBackground=context.fillStyle};await get('#export').onclick();assert.equal(exportBackground,'#fce6ed');
+get('#tools').children.find(b=>b.attrs['aria-label']==='橡皮擦').onclick();cv.events.pointerdown(event(9,60,60));cv.events.pointerup(event(9,60,60));assert.equal(api.getState().strokes.at(-1).tool,'eraser');assert.equal(get('#board').style.background,'#fce6ed');
+get('#clear').onclick();get('#confirm').onclick();assert.equal(api.getState().background,'#fce6ed');assert.equal(api.getState().strokes.length,0);
+const old={version:1,pattern:'blank',strokes:[]};assert(engine.validDocument(old,['blank']));assert.equal(engine.backgroundColor(old),'#ffffff');assert(!engine.validDocument({...old,background:'url(bad)'},['blank']));
+console.log('PASS background UI, preserved art, undo/redo, saved document, erase, export fill, clear, legacy white and validation.');
+cv.events.pointerdown(event(10,80,90));cv.events.pointerup(event(10,80,90));
+const categoryState=JSON.stringify(api.getState());
+for(const category of get('#pattern-categories').children){category.onclick();assert.equal(JSON.stringify(api.getState()),categoryState);for(const p of get('#patterns').children)assert.equal(p.hidden,category.dataset.id!=='all'&&p.dataset.category!==category.dataset.id)}
+get('#pattern-categories').children[0].onclick();
+const different=get('#patterns').children.find(b=>b.dataset.id!==api.getState().pattern&&b.dataset.id!=='blank');different.onclick();assert.equal(get('#confirm-dialog').open,true);get('#cancel').onclick();assert.equal(JSON.stringify(api.getState()),categoryState);
+console.log('PASS category filtering preserves drawing/background and switching still requires confirmation.');
+assert.equal(get('#colors').children.length,20);
+get('#color-open').onclick();assert(get('#color-dialog').open);
+get('#custom-color').events.input({target:{value:'#Ab12Ef'}});assert.equal(get('#current-color').style.background,'#ab12ef');
+get('#tools').children[0].onclick();cv.events.pointerdown(event(20,80,90));cv.events.pointerup(event(20,80,90));assert.equal(api.getState().strokes.at(-1).color,'#ab12ef');assert.equal(api.getState().strokes.at(-1).rainbow,false);
+get('#custom-color').events.input({target:{value:'url(bad)'}});assert.equal(get('#current-color').style.background,'#ab12ef');
+get('#rainbow-color').onclick();assert.equal(get('#rainbow-color').attrs['aria-pressed'],'true');assert.equal(get('#color-dialog').open,false);
+cv.events.pointerdown(event(21,80,90));cv.events.pointermove(event(21,180,190));cv.events.pointerup(event(21,180,190));assert.equal(api.getState().strokes.at(-1).rainbow,true);
+get('#tools').children.find(b=>b.attrs['aria-label']==='橡皮擦').onclick();cv.events.pointerdown(event(22,80,90));cv.events.pointerup(event(22,80,90));assert.equal(api.getState().strokes.at(-1).rainbow,false);
+get('#colors').children[1].onclick();assert.equal(get('#rainbow-color').attrs['aria-pressed'],'false');api.save();assert(engine.validDocument(JSON.parse([...store.values()][0]),pats.patterns.map(p=>p.id)));
+console.log('PASS 20 presets, customHEX normalization/rejection, rainbow perstroke persistence, eraser and solid reset.');
