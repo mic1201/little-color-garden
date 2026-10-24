@@ -107,7 +107,19 @@ const edgeStroke=api.getState().strokes.at(-1);assert(edgeStroke.points[0].x<0);
 get('#undo').onclick();assert.equal(api.getState().strokes.length,0);get('#redo').onclick();assert.deepEqual(api.getState().strokes.at(-1),edgeStroke);
 get('.paper-frame').getBoundingClientRect=()=>({left:10,top:20,width:780,height:1700});api.fit();const portrait=api.getView();assert(portrait.x<=edgeStroke.points[0].x);assert(portrait.x+portrait.width>=edgeStroke.points[1].x);assert.deepEqual(api.getState().strokes.at(-1),edgeStroke);
 await get('#export').onclick();assert.equal(get('#export').disabled,false);console.log('PASS app full-white-paper edge ink, undo/redo, saved bounds, rotation retains all artwork, PNG export path.');
-get('#patterns').children.find(p=>p.dataset.id==='parrot').onclick();get('#confirm').onclick();if(!api.getState().numbers)get('#numbers-toggle').onclick();
-const pr=fillRegions.getFillRegions('parrot')[0];const [py,px1,px2]=pr.spans[Math.floor(pr.spans.length/2)];
+get('#patterns').children.find(p=>p.dataset.id==='parrot-cute').onclick();get('#confirm').onclick();if(!api.getState().numbers)get('#numbers-toggle').onclick();
+const pr=fillRegions.getFillRegions('parrot-cute')[0];const [py,px1,px2]=pr.spans[Math.floor(pr.spans.length/2)];
 for(const [width,height]of [[1700,780],[780,1700]]){get('.paper-frame').getBoundingClientRect=()=>({left:10,top:20,width,height});cv.getBoundingClientRect=()=>({left:10,top:20,width,height});api.fit();const v=api.getView();const x=10+((px1+px2)/2-v.x)/v.width*width,y=20+(py+.5-v.y)/v.height*height;cv.events.pointerdown(event(301,x,y));assert.equal(api.getState().fills[0].region,pr.id);assert(get('#number-guide').innerHTML.includes(`viewBox="${v.x} ${v.y} ${v.width} ${v.height}"`));assert(get('#outline').innerHTML.includes(`viewBox="${v.x} ${v.y} ${v.width} ${v.height}"`));}
 console.log('PASS transformed parrot tap-fill hits and numbered/outline alignment in landscape and portrait.');
+
+// Mode toggles remove only labels, never closure contours or existing fills/ink.
+get('#patterns').children.find(p=>p.dataset.id==='rainbow').onclick();get('#confirm').onclick();
+if(!api.getState().numbers)get('#numbers-toggle').onclick();api.fit();
+const rr=fillRegions.getFillRegions('rainbow')[0];const rv=api.getView(),rect=cv.getBoundingClientRect();const [rx,ry]=rr.seeds[0];cv.events.pointerdown(event(401,rect.left+(rx-rv.x)/rv.width*rect.width,rect.top+(ry-rv.y)/rv.height*rect.height));assert.equal(api.getState().fills.length,1);
+const stableOutline=get('#outline').innerHTML;
+assert(stableOutline.includes('M205 600 265 600'),'closure boundary included in persistent line layer');
+const originalState=JSON.stringify(api.getState());
+for(let i=0;i<8;i++){get('#numbers-toggle').onclick();api.fit();assert.equal(get('#outline').innerHTML,stableOutline);if(!api.getState().numbers)assert.equal(get('#number-guide').innerHTML,'');}
+assert.equal(JSON.stringify(api.getState()),originalState);
+if(api.getState().numbers)get('#numbers-toggle').onclick();api.fit();assert(api.exportMarkup().includes('M205 600 265 600'));assert(!api.exportMarkup().includes('<text'));await get('#export').onclick();assert.equal(get('#export').disabled,false);
+console.log('PASS repeated number toggles preserve all original and closure lines with unchanged document.');

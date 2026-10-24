@@ -1,8 +1,9 @@
+import {richGuides} from './rich-patterns.js';
 import {getExtraFillLabels} from './fill-regions.js';
 // Original, hand-positioned color guides. Numbers describe meaningful paintable
 // areas, not tiny eyes/whiskers. A number always means one color within a page.
-// Additive seams close a few open sketch contours only in numbered mode;
-// the original free-drawing artwork in patterns.js is never modified.
+// Closure contours remain visible in both modes; only numeric labels toggle.
+// The original source artwork and saved fill IDs remain unchanged.
 const colors={
  red:['#ed7976','草莓紅'],orange:['#f5aa62','橘子橙'],yellow:['#f3d36b','陽光黃'],
  green:['#39a66d','森林綠'],lime:['#8bbf83','嫩葉綠'],blue:['#7ba8d3','天空藍'],
@@ -101,8 +102,12 @@ const guides={
  [550,140,2,20],[780,180,4]
  ])
 };
-export function getNumberGuide(id){return guides[id]||null}
+export function getNumberGuide(id){return richGuides[id]||guides[id]||null}
+export function closureSvgMarkup(id){
+ const g=getNumberGuide(id);if(!g)return '';
+ return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 900"><g fill="none" stroke="#37424c" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">${g.extraShapes}</g></svg>`;
+}
 export function numberSvgMarkup(id){
  const g=getNumberGuide(id);if(!g)return '';
- return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 900" aria-hidden="true"><g fill="none" stroke="#37424c" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">${g.extraShapes}</g><g fill="#28343b" stroke="#ffffff" stroke-width="6" paint-order="stroke" stroke-linejoin="round" text-anchor="middle" dominant-baseline="central" font-family="Arial,sans-serif" font-weight="700">${[...g.labels,...getExtraFillLabels(id)].map(l=>`<text x="${l.x}" y="${l.y}" font-size="${l.size||28}">${l.number}</text>`).join('')}</g></svg>`;
+ return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 900" aria-hidden="true"><g fill="#28343b" stroke="#ffffff" stroke-width="6" paint-order="stroke" stroke-linejoin="round" text-anchor="middle" dominant-baseline="central" font-family="Arial,sans-serif" font-weight="700">${[...g.labels,...getExtraFillLabels(id)].map(l=>`<text x="${l.x}" y="${l.y}" font-size="${l.size||28}">${l.number}</text>`).join('')}</g></svg>`;
 }
