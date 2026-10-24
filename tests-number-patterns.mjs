@@ -4,7 +4,7 @@ import {patterns} from './dist/patterns.js';
 import {getNumberGuide,numberSvgMarkup} from './dist/number-patterns.js';
 assert.equal(getNumberGuide('blank'),null);assert.equal(getNumberGuide('unknown'),null);
 assert.equal(numberSvgMarkup('blank'),'');
-const pages=patterns.filter(p=>p.id!=='blank');assert.equal(pages.length,24);
+const pages=patterns.filter(p=>p.id!=='blank');assert.equal(pages.length,25);
 for(const p of pages){
  const g=getNumberGuide(p.id);assert.ok(g,`${p.id} has a guide`);
  assert.ok(g.palette.length>=2&&g.palette.length<=7,p.id);
@@ -16,4 +16,4 @@ for(const p of pages){
  const svg=numberSvgMarkup(p.id);assert.match(svg,/viewBox="0 0 1000 900"/);assert.equal((svg.match(/<text /g)||[]).length,g.labels.length+getExtraFillLabels(p.id).length);
 }
 const turtle=getNumberGuide('sea-turtle');assert.equal(turtle.labels.filter(l=>l.number===1).length,7);assert.equal(turtle.palette[0].color,'#39a66d');
-console.log('number patterns: all 24 stored templates, valid repeated color IDs and safe labels passed');
+console.log('number patterns: all 25 stored templates, valid repeated color IDs and safe labels passed');

@@ -1,3 +1,4 @@
+import {halloweenGuide} from './halloween-pattern.js';
 import {richGuides} from './rich-patterns.js';
 import {getExtraFillLabels} from './fill-regions.js';
 // Original, hand-positioned color guides. Numbers describe meaningful paintable
@@ -102,7 +103,7 @@ const guides={
  [550,140,2,20],[780,180,4]
  ])
 };
-export function getNumberGuide(id){return richGuides[id]||guides[id]||null}
+export function getNumberGuide(id){return (id==='halloween-photo'?halloweenGuide:null)||richGuides[id]||guides[id]||null}
 export function closureSvgMarkup(id){
  const g=getNumberGuide(id);if(!g)return '';
  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 900"><g fill="none" stroke="#37424c" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">${g.extraShapes}</g></svg>`;

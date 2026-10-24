@@ -1,3 +1,4 @@
+import {halloweenPattern} from './halloween-pattern.js';
 import {richPatterns} from './rich-patterns.js';
 export const patterns=[
 {id:'blank',category:'free',name:'自由畫',icon:'✨',shapes:''},
@@ -20,7 +21,7 @@ export const patterns=[
 {id:"bus",name:"快樂巴士",icon:"🚌",category:"vehicles",shapes:`<path d="M150 335 Q150 270 220 270 L760 270 Q840 270 850 355 L875 650 Q875 700 815 700 L190 700 Q135 700 135 645Z"/><path d="M180 330 180 480 335 480 335 330Z M375 330 375 480 530 480 530 330Z M570 330 570 480 725 480 725 330Z M765 330 795 330 820 480 765 480Z M735 535 820 535 820 675 735 675Z"/><circle cx="300" cy="700" r="80"/><circle cx="300" cy="700" r="38"/><circle cx="680" cy="700" r="80"/><circle cx="680" cy="700" r="38"/><path d="M170 550 215 550 215 595 170 595Z M410 565 585 565 M120 805 885 805"/>`},
 {id:"sailboat",name:"小帆船",icon:"⛵",category:"vehicles",shapes:`<path d="M170 600 830 600 725 760 290 760Z M510 170 510 600 M485 205 250 560 485 560Z M540 270 765 560 540 560Z M510 170 510 110 620 140 510 170"/><circle cx="370" cy="670" r="30"/><circle cx="500" cy="670" r="30"/><circle cx="630" cy="670" r="30"/><path d="M100 810 Q200 770 300 810 T500 810 T700 810 T900 810"/><circle cx="780" cy="180" r="55"/><path d="M780 85 780 60 M780 300 780 275 M685 180 660 180 M875 180 900 180"/>`} ,
 {id:'parrot',name:'彩色鸚鵡',icon:'🦜',category:'animals',shapes:`<path d="M390 580 350 805 Q405 835 450 790 L480 610Z M480 610 450 790 Q505 825 555 785 L545 590Z"/><path d="M350 340 C300 180 460 100 580 170 Q660 210 650 300 Q680 370 620 420 C710 650 550 720 400 610 Q315 510 350 340Z"/><path d="M650 245 Q790 255 730 365 Q680 330 650 310Z"/><ellipse cx="545" cy="270" rx="65" ry="70"/><circle cx="555" cy="250" r="12"/><path d="M420 370 C570 360 630 510 535 600 Q405 590 395 450 Q390 405 420 370Z"/><ellipse cx="480" cy="520" rx="45" ry="50"/><path d="M250 735 Q500 710 750 735 L750 770 Q500 745 250 770Z"/><path d="M460 655 455 730 M525 665 525 730 M435 735 475 735 M505 735 545 735"/>`}
-,...richPatterns];
+,...richPatterns,halloweenPattern];
 export function svgMarkup(id){const p=patterns.find(p=>p.id===id)||patterns[0];return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 900"><g fill="none" stroke="#37424c" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">${p.shapes}</g></svg>`}
 export const patternCategories=[
 {id:'ocean',name:'海洋',icon:'🐳'},
