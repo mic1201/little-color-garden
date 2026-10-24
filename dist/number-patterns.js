@@ -1,3 +1,4 @@
+import {getExtraFillLabels} from './fill-regions.js';
 // Original, hand-positioned color guides. Numbers describe meaningful paintable
 // areas, not tiny eyes/whiskers. A number always means one color within a page.
 // Additive seams close a few open sketch contours only in numbered mode;
@@ -28,7 +29,7 @@ const guides={
  ]),
  dinosaur:guide(['lime','orange','yellow'],[
  [365,470,1],[590,550,1],[400,730,1],[665,735,1],[790,610,1],
- [500,455,2,22],[610,445,2,22],[700,510,2,22],[515,580,3],[650,610,3,22]
+ [500,455,2,22],[610,445,2,22],[700,490,2,22],[515,580,3],[650,610,3,22]
  ],'<path d="M465 492 560 472 M560 472 650 482 M650 482 735 522"/>'),
  rainbow:guide(['red','yellow','blue','purple'],[
  [500,235,1],[500,295,2],[500,355,3],[235,650,4],[765,650,4],
@@ -48,7 +49,7 @@ const guides={
  [490,455,1],[490,320,1],[365,375,1],[615,375,1],
  [330,530,1],[650,525,1],[495,610,1],
  [765,480,2],[245,310,2],[250,645,2],[675,275,2],[680,665,2],[235,485,2,20]
- ],'<path d="M405 315 400 307 M580 320 590 312 M695 440 698 440 M595 625 600 623 M385 625 380 623 M285 435 284 435"/>'),
+ ],'<path d="M345 325 357 338 M405 315 400 307 M580 320 590 312 M695 440 698 440 M595 625 600 623 M385 625 380 623 M285 435 284 435"/>'),
  rabbit:guide(['cream','pink','purple'],[
  [350,270,1,18],[650,270,1,18],[500,365,1],[500,550,1],[500,635,1],
  [350,770,3],[650,770,3],[390,755,3,18],[610,755,3,18],[368,210,2,18],[632,210,2,18]
@@ -78,7 +79,7 @@ const guides={
  [420,570,3,20],[580,570,3,20],[500,655,3,18]
  ]),
  'princess-dress':guide(['yellow','brown','cream','purple','pink'],[
- [500,195,1],[420,280,2,20],[570,280,2,20],[385,410,2,20],[615,410,2,20],
+ [500,195,1],[420,265,2,20],[570,280,2,20],[385,410,2,20],[615,410,2,20],
  [500,365,3],[425,500,3,18],[575,500,3,18],
  [500,495,4],[350,750,4],[650,750,4],[500,760,5],[500,675,1]
  ],'<path d="M450 565 453 545 M550 565 547 545 M400 800 400 820 M600 800 600 820 M440 560 435 505 M560 560 565 505"/>'),
@@ -88,7 +89,7 @@ const guides={
  [275,510,3,24],[725,510,3,24],[500,430,3],
  [470,730,4],[530,730,4],[500,535,5,20],
  [535,85,5,18],[300,165,5,16],[750,165,5,16]
- ],'<path d="M315 380 395 380 M605 380 685 380 M395 295 365 295 M605 295 635 295"/>'),
+ ],'<path d="M235 380 315 380 M685 380 765 380 M315 380 395 380 M605 380 685 380 M395 295 365 295 M605 295 635 295"/>'),
  bus:guide(['yellow','blue','dark','purple','red'],[
  [455,620,1],[255,405,2],[455,405,2],[650,405,2],[790,420,2,20],
  [300,755,3,24],[680,755,3,24],[300,645,3,24],[680,645,3,24],
@@ -102,5 +103,5 @@ const guides={
 export function getNumberGuide(id){return guides[id]||null}
 export function numberSvgMarkup(id){
  const g=getNumberGuide(id);if(!g)return '';
- return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 900" aria-hidden="true"><g fill="none" stroke="#37424c" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">${g.extraShapes}</g><g fill="#28343b" stroke="#ffffff" stroke-width="6" paint-order="stroke" stroke-linejoin="round" text-anchor="middle" dominant-baseline="central" font-family="Arial,sans-serif" font-weight="700">${g.labels.map(l=>`<text x="${l.x}" y="${l.y}" font-size="${l.size||28}">${l.number}</text>`).join('')}</g></svg>`;
+ return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 900" aria-hidden="true"><g fill="none" stroke="#37424c" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">${g.extraShapes}</g><g fill="#28343b" stroke="#ffffff" stroke-width="6" paint-order="stroke" stroke-linejoin="round" text-anchor="middle" dominant-baseline="central" font-family="Arial,sans-serif" font-weight="700">${[...g.labels,...getExtraFillLabels(id)].map(l=>`<text x="${l.x}" y="${l.y}" font-size="${l.size||28}">${l.number}</text>`).join('')}</g></svg>`;
 }

@@ -1,0 +1,4 @@
+// Developer-only region source renderer. Pass installed @resvg/resvg-wasm path.
+import {patterns,svgMarkup} from '../dist/patterns.js';import {getNumberGuide} from '../dist/number-patterns.js';import fs from 'node:fs';
+const root=process.argv[2];const {Resvg,initWasm}=await import(root+'/index.mjs');await initWasm(fs.readFileSync(root+'/index_bg.wasm'));
+fs.mkdirSync('/tmp/lcg-fill',{recursive:true});for(const p of patterns.filter(p=>p.id!=='blank')){const g=getNumberGuide(p.id);const svg=svgMarkup(p.id).replace('</svg>',`<g fill="none" stroke="#37424c" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">${g.extraShapes}</g></svg>`);fs.writeFileSync('/tmp/lcg-fill/'+p.id+'.png',new Resvg(svg).render().asPng());fs.writeFileSync('/tmp/lcg-fill/'+p.id+'.json',JSON.stringify(g));}
