@@ -267,7 +267,7 @@ for (const event of ['fullscreenchange','webkitfullscreenchange']) {
   document.addEventListener(event,() => focusMode.change());
 }
 document.addEventListener('keydown',event => {
-  if (event.key==='Escape' && focusMode.getState().focused && !document.querySelector('dialog[open]')) {
+  if (event.key==='Escape' && !event.defaultPrevented && focusMode.getState().focused && !document.querySelector('dialog[open]')) {
     void focusMode.exit();
   }
 });

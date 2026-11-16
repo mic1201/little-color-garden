@@ -103,21 +103,23 @@ function ghostAt({x, y}, scale = 1) {
 export function createRewards({board, ink, getState, motionArtwork, canCelebrate, save}) {
   const hud = board.querySelector('#reward-hud');
   const progress = board.querySelector('#reward-progress');
-  const continueDrawing = board.querySelector('#reward-continue');
+  const playback = board.querySelector('#reward-playback');
   const celebration = board.querySelector('#reward-celebration');
   const chest = board.querySelector('#reward-chest');
   const stickerLayer = board.querySelector('#reward-stickers');
   const motionLayer = board.querySelector('#reward-motion');
   const context = motionLayer.getContext('2d');
   const tray = document.querySelector('#reward-tray');
+  const trayButton = document.querySelector('#reward-open');
   const inventory = document.querySelector('#reward-inventory');
+  const emptyTray = document.querySelector('#reward-empty');
   const status = document.querySelector('#reward-status');
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const measure = createPaintProgress();
   const audio = createChestAudio();
   stickerLayer.hidden = false;
   stickerLayer.removeAttribute('hidden');
-  tray.hidden = false;
+  trayButton.hidden = false;
 
   let state;
   let reward;
@@ -139,6 +141,25 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     save();
   }
 
+  function setTrayOpen(open) {
+    tray.hidden = !open;
+    trayButton.setAttribute('aria-expanded', String(open));
+    if (open) delete trayButton.dataset.new;
+  }
+
+  function updateInventory() {
+    emptyTray.hidden = collected.length > 0;
+    inventory.hidden = !collected.length;
+  }
+
+  function updatePlayback(playing) {
+    playback.hidden = !reward?.completed || !parts.length;
+    playback.toggleAttribute('data-playing', playing);
+    const label = playing ? '暫停動畫，繼續作畫' : '播放動畫';
+    playback.setAttribute('aria-label', label);
+    playback.title = label;
+  }
+
   function poseSticker(element, {x, y, angle = 0}) {
     element.setAttribute('transform', `translate(${x} ${y}) rotate(${angle}) scale(${STICKER_SIZE / 64}) translate(-32 -32)`);
   }
@@ -155,23 +176,27 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     delete flight.item.dataset.arriving;
     flight.item.tabIndex = 0;
     celebration.hidden = true;
-    status.textContent = `收集到${stickerById.get(flight.id).name}，可以從裝飾品欄拖到畫布。`;
+    if (tray.hidden) trayButton.dataset.new = '';
+    status.textContent = `收集到${stickerById.get(flight.id).name}，可以打開裝飾品拖到畫布。`;
   }
 
   function stop() {
     generation++;
     cancelAnimationFrame(frame);
     board.removeAttribute('data-celebrating');
-    continueDrawing.hidden = true;
+    updatePlayback(false);
     motionLayer.hidden = true;
     stickerNodes.forEach(({element, sticker}) => poseSticker(element, sticker));
     finishFlight();
   }
 
-  async function play() {
+  async function play(manual = false) {
+    if (!reward.completed || !parts.length || (reducedMotion.matches && !manual)) {
+      updatePlayback(false);
+      return;
+    }
     board.dataset.celebrating = '';
-    continueDrawing.hidden = false;
-    if (!parts.length || reducedMotion.matches) return;
+    updatePlayback(true);
     const ticket = generation;
     try {
       const snapshot = {...state, strokes: state.strokes.slice(), fills: state.fills?.slice()};
@@ -193,7 +218,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
       next(started);
     } catch {
       if (ticket !== generation) return;
-      motionLayer.hidden = true;
+      stop();
       status.textContent = '動畫暫時無法播放，可以繼續作畫。';
     }
   }
@@ -201,7 +226,6 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   function showChest(id, item) {
     item.dataset.arriving = '';
     item.tabIndex = -1;
-    item.scrollIntoView({block: 'nearest', inline: 'nearest'});
     const flight = {id, item};
     flyingReward = flight;
     celebration.hidden = false;
@@ -213,7 +237,8 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
       }
       const center = centerOf(chest);
       const start = {x: center.x, y: center.y - chest.getBoundingClientRect().height * .12};
-      const end = centerOf(item);
+      if (!tray.hidden) item.scrollIntoView({block: 'nearest'});
+      const end = centerOf(tray.hidden ? trayButton : item);
       flight.ghost = stickerGhost(id);
       if (!flight.ghost.animate) {
         finishFlight();
@@ -238,6 +263,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     if (id) {
       const item = makeInventoryItem(id);
       inventory.append(item);
+      updateInventory();
       showChest(id, item);
     }
     void play();
@@ -256,6 +282,9 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
       parts = motionFor(state.pattern);
       renderStickers();
       inventory.replaceChildren(...collected.map(makeInventoryItem));
+      updateInventory();
+      setTrayOpen(false);
+      updatePlayback(false);
       hud.hidden = true;
     }
     timer = setTimeout(() => {
@@ -338,7 +367,10 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
       if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 4) return;
       drag.moved = true;
       stop();
-      if (!drag.sticker) drag.ghost = stickerGhost(drag.id);
+      if (!drag.sticker) {
+        tray.dataset.dragging = '';
+        drag.ghost = stickerGhost(drag.id);
+      }
     }
     event.preventDefault();
     if (drag.sticker) {
@@ -356,6 +388,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     if (!drag) return;
     if (drag.sticker) poseSticker(drag.node, drag.sticker);
     drag.ghost?.remove();
+    delete tray.dataset.dragging;
     drag = null;
   }
 
@@ -370,16 +403,18 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
       setTimeout(() => { if (suppressedClick === node) suppressedClick = null; }, 350);
     }
     const rect = board.getBoundingClientRect();
-    if (inRect(event.clientX, event.clientY, rect)) {
+    const {clientX: x, clientY: y} = event;
+    if (sticker && (inRect(x, y, trayButton.getBoundingClientRect()) ||
+        (!tray.hidden && inRect(x, y, tray.getBoundingClientRect())))) {
+      removeSticker(sticker);
+    } else if (inRect(x, y, rect)) {
       const point = positionFromEvent(event, rect, offset);
       if (sticker) {
         savePlacement(sticker, point);
         poseSticker(node, sticker);
-      } else {
-        addSticker(id, point);
+      } else if (addSticker(id, point)) {
+        setTrayOpen(false);
       }
-    } else if (sticker && inRect(event.clientX, event.clientY, tray.getBoundingClientRect())) {
-      removeSticker(sticker);
     }
   }
 
@@ -395,7 +430,11 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     item.onclick = event => {
       if (event.detail && suppressedClick === item) return;
       stop();
-      addSticker(id, position({x: area.x + area.width / 2, y: area.y + area.height / 2}))?.focus();
+      const placed = addSticker(id, position({x: area.x + area.width / 2, y: area.y + area.height / 2}));
+      if (placed) {
+        setTrayOpen(false);
+        placed.focus();
+      }
     };
     return item;
   }
@@ -421,7 +460,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
         poseSticker(element, sticker);
       } else {
         removeSticker(sticker);
-        inventory.querySelector(`[data-sticker="${sticker.id}"]`)?.focus();
+        trayButton.focus();
       }
     });
     return element;
@@ -433,10 +472,26 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     reward.stickers.forEach(renderSticker);
   }
 
-  continueDrawing.onclick = () => {
-    stop();
-    status.textContent = '已回到原本的畫，現在可以繼續作畫。';
+  playback.onclick = () => {
+    if (board.hasAttribute('data-celebrating')) {
+      stop();
+      status.textContent = '已回到原本的畫，現在可以繼續作畫。';
+    } else {
+      void play(true);
+    }
   };
+  trayButton.onclick = () => setTrayOpen(tray.hidden);
+  document.addEventListener('pointerdown', event => {
+    if (!tray.hidden && !tray.contains(event.target) && !trayButton.contains(event.target) &&
+        !event.target.closest('.placed-sticker')) setTrayOpen(false);
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || tray.hidden) return;
+    event.preventDefault();
+    cancelDrag();
+    setTrayOpen(false);
+    trayButton.focus();
+  }, true);
   ink.addEventListener('pointerdown', audio.warm);
   board.addEventListener('pointerup', audio.warm);
   window.addEventListener('pointermove', moveDrag, {capture: true, passive: false});

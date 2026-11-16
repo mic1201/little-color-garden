@@ -4,9 +4,10 @@
 <svg id="reward-stickers" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 900" role="group" aria-label="畫布上的裝飾品" hidden></svg>
 <div id="reward-hud" hidden>
   <span id="reward-progress" title="圖案塗色進度，背景除外">0%</span>
-  <button id="reward-continue" type="button" aria-label="繼續作畫" title="繼續作畫" hidden>
-    <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M18 25H6v-7M6 25l5-5m4-4L25 6a2.1 2.1 0 0 1 3 3L18 19l-4 1zm7-7 3 3"/>
+  <button id="reward-playback" type="button" aria-label="播放動畫" title="播放動畫" aria-controls="reward-motion" hidden>
+    <svg viewBox="0 0 32 32" aria-hidden="true">
+      <path class="reward-play-icon" d="M11 7v18l15-9z" fill="currentColor" stroke="currentColor" stroke-linejoin="round" stroke-width="2.3"/>
+      <path class="reward-pause-icon" d="M11 8v16M21 8v16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="3.6"/>
     </svg>
   </button>
 </div>
@@ -30,10 +31,6 @@
   </svg>
 </div>
 <div id="welcome" class="welcome"><span aria-hidden="true">🖍️</span><div class="welcome-trail" aria-hidden="true">· 〰 ·</div><p class="sr-only">用手指或觸控筆開始畫畫</p></div></div></div></div></main><div class="drawing-toolbar" aria-label="畫畫工具" role="group">
-  <div id="reward-tray" class="reward-tray" role="group" aria-label="收集的裝飾品" hidden>
-    <svg class="reward-tray-icon" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11h18v11H4zM2.5 7h21v4h-21zM13 7v15M13 7C3 8 6 0 10 3zm0 0c10 1 7-7 3-4z"/></svg>
-    <div id="reward-inventory"></div>
-  </div>
   <div class="toolbar-paint">
     <button id="color-open" class="toolbar-button color-open" aria-label="選畫筆顏色" aria-haspopup="dialog"><span id="current-color" aria-hidden="true"></span></button>
     <button id="brush-summary" class="toolbar-button brush-open" aria-label="選畫筆" aria-haspopup="dialog"><span id="brush-icon" aria-hidden="true">🖍️</span><span id="brush-name" class="sr-only">彩色筆</span></button>
@@ -45,6 +42,13 @@
     <button id="undo" class="toolbar-button" aria-label="復原上一步" title="復原上一步">↶</button>
     <button id="redo" class="toolbar-button" aria-label="重做下一步" title="重做下一步">↷</button>
     <button id="parent" class="toolbar-button parent-button" aria-label="大人幫手" title="大人幫手" aria-haspopup="dialog">⚙</button>
+    <button id="reward-open" type="button" class="toolbar-button" aria-label="裝飾品" title="裝飾品" aria-expanded="false" aria-controls="reward-tray" hidden>
+      <svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11h18v11H4zM2.5 7h21v4h-21zM13 7v15M13 7C3 8 6 0 10 3zm0 0c10 1 7-7 3-4z"/></svg>
+    </button>
+    <div id="reward-tray" class="reward-tray" role="group" aria-label="收集的裝飾品" hidden>
+      <p id="reward-empty">塗色達到 85% 就能收集裝飾品。</p>
+      <div id="reward-inventory" hidden></div>
+    </div>
   </div>
 </div>
 <button id="storage-warning" class="storage-warning" hidden aria-label="需要大人協助，點一下查看作品儲存訊息" title="請大人幫忙">⚠️</button>
