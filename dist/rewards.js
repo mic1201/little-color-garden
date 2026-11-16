@@ -118,7 +118,7 @@ function ghostAt({x, y}, scale = 1) {
   return `translate(${x - 28}px,${y - 28}px) scale(${scale})`;
 }
 
-export function createRewards({board, ink, getState, motionArtwork, canCelebrate, save, debugPlayback = false}) {
+export function createRewards({board, ink, getState, motionArtwork, canCelebrate, save}) {
   const hud = board.querySelector('#reward-hud');
   const progress = board.querySelector('#reward-progress');
   const playback = board.querySelector('#reward-playback');
@@ -185,10 +185,9 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   }
 
   function updatePlayback(playing) {
-    playback.hidden = !parts.length || (!reward?.completed && !debugPlayback);
+    playback.hidden = !parts.length || !reward?.completed;
     playback.toggleAttribute('data-playing', playing);
-    const playLabel = debugPlayback && !reward?.completed ? '試播動畫' : '播放動畫';
-    const label = playing ? '暫停動畫，繼續作畫' : playLabel;
+    const label = playing ? '暫停動畫，繼續作畫' : '播放動畫';
     playback.setAttribute('aria-label', label);
     playback.title = label;
   }
@@ -226,8 +225,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   }
 
   async function play(manual = false) {
-    const preview = manual && debugPlayback;
-    if ((!reward.completed && !preview) || !parts.length || (reducedMotion.matches && !manual)) {
+    if (!reward.completed || !parts.length || (reducedMotion.matches && !manual)) {
       updatePlayback(false);
       return;
     }
