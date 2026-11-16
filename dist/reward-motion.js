@@ -104,6 +104,7 @@ export function motionFor(pattern) {
 }
 
 const PIXELS = W * H;
+const INK_FOLLOW_THRESHOLD_PERCENT = 60;
 const WARP_PADDING = 64;
 let lastGeometry;
 
@@ -208,8 +209,8 @@ export function inkMotionOwners(rgba, geometry, width = W) {
       const part = geometry[pixels[i]];
       if (part && ++coverage[part] > coverage[winner]) winner = part;
     }
-    // Background pixels count toward the component size. Exactly 80% stays put.
-    if (coverage[winner] * 5 <= length * 4) return;
+    // Background pixels count toward the component size.
+    if (coverage[winner] * 100 <= length * INK_FOLLOW_THRESHOLD_PERCENT) return;
     for (let i = 0; i < length; i++) owners[pixels[i]] = winner;
   }, width);
   return owners;
