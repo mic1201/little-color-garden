@@ -13,8 +13,29 @@
 </div>
 <div id="reward-celebration" hidden aria-hidden="true">
   <svg id="reward-chest" viewBox="0 0 120 104">
-    <g id="reward-sparks" fill="#ffe987" stroke="#d79344" stroke-width="2" stroke-linejoin="round">
-      <path d="M16 25 19 34 28 37 19 40 16 49 13 40 4 37 13 34Z M101 15 104 24 113 27 104 30 101 39 98 30 89 27 98 24Z M71 2 73 9 80 11 73 13 71 20 69 13 62 11 69 9Z"/>
+    <defs>
+      <radialGradient id="chest-halo">
+        <stop stop-color="#fffbe1"/><stop offset=".47" stop-color="#ffe782" stop-opacity=".72"/><stop offset="1" stop-color="#ffda63" stop-opacity="0"/>
+      </radialGradient>
+      <linearGradient id="chest-ray" x1="0" x2="0" y1="100%" y2="0">
+        <stop stop-color="#fff8ce"/><stop offset=".55" stop-color="#ffe997" stop-opacity=".74"/><stop offset="1" stop-color="#fff8ce" stop-opacity="0"/>
+      </linearGradient>
+      <path id="chest-star" d="M0-9Q2-1 9 0 2 1 0 9-2 1-9 0-2-1 0-9Z"/>
+    </defs>
+    <g id="reward-chest-light">
+      <ellipse cx="60" cy="36" rx="122" ry="94" fill="url(#chest-halo)"/>
+      <path d="M57 58-25-20 5-28 63 57ZM58 57 21-53 43-56 63 58ZM59 58 53-63 78-62 64 58ZM60 57 95-51 116-43 64 58ZM62 58 129-25 153-6 66 57Z" fill="url(#chest-ray)"/>
+    </g>
+    <g id="reward-sparks" stroke-linejoin="round">
+      <use href="#chest-star" x="13" y="17" fill="#fff5b0" stroke="#dca451"/>
+      <use href="#chest-star" x="104" y="9" fill="#fffceb" stroke="#dca451"/>
+      <use href="#chest-star" x="43" y="-26" fill="#fffbe4" stroke="#e9bc68"/>
+      <use href="#chest-star" x="87" y="-14" fill="#fff5b0" stroke="#e9bc68"/>
+      <use href="#chest-star" x="124" y="36" fill="#fff5b0" stroke="#e9bc68"/>
+      <use href="#chest-star" x="-9" y="49" fill="#fffbe4" stroke="#e9bc68"/>
+      <circle cx="65" cy="-14" r="3" fill="#fffbe4"/>
+      <circle cx="28" cy="-5" r="2.5" fill="#fff2aa"/>
+      <circle cx="95" cy="33" r="3" fill="#fffbe4"/>
     </g>
     <g stroke="#755039" stroke-width="3" stroke-linejoin="round">
       <ellipse cx="60" cy="95" rx="45" ry="5" fill="#68433733" stroke="none"/>
@@ -22,6 +43,7 @@
       <path d="M25 58h70M25 77h70" stroke="#ab6c4a"/>
       <path d="M34 56v34m52-34v34" stroke="#edb874" stroke-width="6"/>
       <ellipse cx="60" cy="55" rx="37" ry="11" fill="#755039"/>
+      <ellipse id="reward-chest-shine" cx="60" cy="54" rx="32" ry="8" fill="#fff5ae" stroke="none"/>
       <g id="reward-lid">
         <path d="M22 55V45c0-12 9-17 21-17h34c12 0 21 5 21 17v10Z" fill="#edaa66"/>
         <path d="M34 35v20m52-20v20" stroke="#ffe08a" stroke-width="5"/>
@@ -77,5 +99,9 @@
     <p id="spectrum-keys" class="sr-only">左右切換色相，上下調明暗，按 Enter 或空白鍵套用。</p>
   </div>
 </dialog>
-<dialog id="parent-dialog"><div class="dialog-title"><h2>大人幫手</h2><button class="close" data-close aria-label="關閉">×</button></div><p id="save-status" role="status">作品留在這台裝置</p><p id="storage-help">作品只暫存在這個瀏覽器，不會上傳。清除瀏覽器資料、無痕模式或換裝置可能找不到，喜歡的畫請另存圖片。</p><button id="export" class="action primary">↓ 儲存作品 PNG</button><button id="fullscreen-toggle" class="action setting" aria-label="全螢幕" aria-pressed="false"><span>⛶ 全螢幕</span><span class="setting-indicator" aria-hidden="true"></span></button><button id="clear" class="action danger">♻ 換一張乾淨的紙</button><p id="export-help" class="tiny">平板小提示：若圖片另開視窗，長按圖片儲存，或使用系統分享。直向、橫向都可以畫。</p><p class="tiny">🖍️ 選畫筆；按色圓選基本色，或按「自訂顏色」開啟光譜；🖼️ 選圖案。</p><p class="tiny">🪣 切換點填色。選好喜歡的顏色，再點線稿裡的區塊或畫紙背景。重複點選可以換色，↶ 可以復原。切回畫筆就能繼續手繪。</p><div id="export-preview"></div></dialog><dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message"><div class="dialog-title"><h2 id="confirm-title" class="sr-only">換一張紙嗎？</h2></div><p id="confirm-message" class="sr-only">目前這張畫會被清掉，先請大人儲存喜歡的作品。</p><div id="confirm-preview" class="confirm-preview" aria-hidden="true"><span>🎨</span><span>→</span><span>📄</span></div><div class="confirm-actions"><button id="cancel" class="action" aria-label="取消，保留現在的畫" title="保留現在的畫"><span aria-hidden="true">↩ 🖍️</span><span class="sr-only">保留現在的畫</span></button><button id="confirm" class="action primary" aria-label="確定換紙，現在的筆跡將清除" title="確定換紙"><span aria-hidden="true">📄 ✓</span><span class="sr-only">確定換紙</span></button></div></dialog><p id="reward-status" class="sr-only" role="status"></p>
+<dialog id="parent-dialog"><div class="dialog-title"><h2>大人幫手</h2><button class="close" data-close aria-label="關閉">×</button></div><p id="save-status" role="status">作品留在這台裝置</p><p id="storage-help">作品只暫存在這個瀏覽器，不會上傳。清除瀏覽器資料、無痕模式或換裝置可能找不到，喜歡的畫請另存圖片。</p><button id="export" class="action primary">↓ 儲存作品 PNG</button><button id="fullscreen-toggle" class="action setting" aria-label="全螢幕" aria-pressed="false"><span>⛶ 全螢幕</span><span class="setting-indicator" aria-hidden="true"></span></button><button id="clear" class="action danger">♻ 換一張乾淨的紙</button><section id="reward-collection-settings" hidden aria-label="裝飾品收藏">
+  <p id="reward-collection-count" class="tiny" role="status"></p>
+  <button id="reward-collection-reset" type="button" class="action">重置裝飾品收藏</button>
+  <button id="reward-collection-restore" type="button" class="action" hidden>還原收藏</button>
+</section><p id="export-help" class="tiny">平板小提示：若圖片另開視窗，長按圖片儲存，或使用系統分享。直向、橫向都可以畫。</p><p class="tiny">🖍️ 選畫筆；按色圓選基本色，或按「自訂顏色」開啟光譜；🖼️ 選圖案。</p><p class="tiny">🪣 切換點填色。選好喜歡的顏色，再點線稿裡的區塊或畫紙背景。重複點選可以換色，↶ 可以復原。切回畫筆就能繼續手繪。</p><div id="export-preview"></div></dialog><dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message"><div class="dialog-title"><h2 id="confirm-title" class="sr-only">換一張紙嗎？</h2></div><p id="confirm-message" class="sr-only">目前這張畫會被清掉，先請大人儲存喜歡的作品。</p><div id="confirm-preview" class="confirm-preview" aria-hidden="true"><span>🎨</span><span>→</span><span>📄</span></div><div class="confirm-actions"><button id="cancel" class="action" aria-label="取消，保留現在的畫" title="保留現在的畫"><span aria-hidden="true">↩ 🖍️</span><span class="sr-only">保留現在的畫</span></button><button id="confirm" class="action primary" aria-label="確定換紙，現在的筆跡將清除" title="確定換紙"><span aria-hidden="true">📄 ✓</span><span class="sr-only">確定換紙</span></button></div></dialog><p id="reward-status" class="sr-only" role="status"></p>
 <audio id="soundtrack" preload="none" hidden></audio><script type="module" src="app.js"></script></body></html>

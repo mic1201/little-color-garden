@@ -25,9 +25,27 @@ function readReward(state) {
   };
 }
 
+function collectionIds(ids) {
+  return Array.isArray(ids) ? ids.filter(id => stickerById.has(id)) : [];
+}
+
 export function rewardCollection(state) {
-  const saved = Array.isArray(state.rewardCollection) ? state.rewardCollection.filter(id => stickerById.has(id)) : [];
-  return [...new Set([...saved, ...readReward(state).stickers.map(sticker => sticker.id)])];
+  const saved = collectionIds(state.rewardCollection);
+  // Before a reset, older works can supply sticker IDs missing from the saved collection.
+  const placed = Array.isArray(state.rewardCollectionBackup) ? [] : readReward(state).stickers.map(sticker => sticker.id);
+  return [...new Set([...saved, ...placed])];
+}
+
+export function changeRewardCollection(state, restore) {
+  const backup = [...new Set([...collectionIds(state.rewardCollectionBackup), ...rewardCollection(state)])];
+  if (restore) {
+    state.rewardCollection = backup;
+    delete state.rewardCollectionBackup;
+  } else {
+    state.rewardCollectionBackup = backup;
+    state.rewardCollection = [];
+  }
+  return state.rewardCollection;
 }
 
 export function chooseReward(collected, random = Math.random) {
@@ -114,6 +132,10 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   const inventory = document.querySelector('#reward-inventory');
   const emptyTray = document.querySelector('#reward-empty');
   emptyTray.textContent = `塗色達到 ${REWARD_THRESHOLD}% 就能收集裝飾品。`;
+  const collectionSettings = document.querySelector('#reward-collection-settings');
+  const collectionCount = document.querySelector('#reward-collection-count');
+  const resetCollection = document.querySelector('#reward-collection-reset');
+  const restoreCollection = document.querySelector('#reward-collection-restore');
   const status = document.querySelector('#reward-status');
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const measure = createPaintProgress();
@@ -121,6 +143,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   stickerLayer.hidden = false;
   stickerLayer.removeAttribute('hidden');
   trayButton.hidden = false;
+  collectionSettings.hidden = false;
 
   let state;
   let reward;
@@ -151,6 +174,14 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   function updateInventory() {
     emptyTray.hidden = collected.length > 0;
     inventory.hidden = !collected.length;
+    collectionCount.textContent = `已收集 ${collected.length} 件裝飾品`;
+    resetCollection.disabled = collected.length === 0;
+    restoreCollection.hidden = collectionIds(state.rewardCollectionBackup).length === 0;
+  }
+
+  function renderInventory() {
+    inventory.replaceChildren(...collected.map(makeInventoryItem));
+    updateInventory();
   }
 
   function updatePlayback(playing) {
@@ -230,7 +261,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     const flight = {id, item};
     flyingReward = flight;
     celebration.hidden = false;
-    flight.sound = setTimeout(audio.play, 295);
+    flight.sound = setTimeout(audio.play, 605);
     flight.launch = setTimeout(() => {
       if (reducedMotion.matches) {
         finishFlight();
@@ -246,14 +277,14 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
         return;
       }
       flight.animation = flight.ghost.animate([
-        {transform: ghostAt(start, .55), opacity: 0},
-        {transform: ghostAt({x: start.x, y: start.y - 55}, 1.18), opacity: 1, offset: .32},
-        {transform: ghostAt(end, .57), opacity: 1}
-      ], {duration: 720, easing: 'ease-in-out', fill: 'both'});
+        {transform: ghostAt(start, .52), opacity: 0, filter: 'drop-shadow(0 0 5px #fff5ab)'},
+        {transform: ghostAt({x: start.x, y: start.y - 66}, 1.24), opacity: 1, filter: 'drop-shadow(0 0 16px #ffed8e)', offset: .35},
+        {transform: ghostAt(end, .57), opacity: 1, filter: 'drop-shadow(0 0 2px #fff5ab)'}
+      ], {duration: 1380, easing: 'ease-in-out', fill: 'both'});
       flight.animation.finished.then(() => {
         if (flyingReward === flight) finishFlight();
       }).catch(() => {});
-    }, reducedMotion.matches ? 520 : 565);
+    }, reducedMotion.matches ? 945 : 1230);
   }
 
   function award() {
@@ -282,8 +313,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
       if (collected.length) state.rewardCollection = collected;
       parts = motionFor(state.pattern);
       renderStickers();
-      inventory.replaceChildren(...collected.map(makeInventoryItem));
-      updateInventory();
+      renderInventory();
       setTrayOpen(false);
       updatePlayback(false);
       hud.hidden = true;
@@ -338,7 +368,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     reward.stickers.splice(reward.stickers.indexOf(sticker), 1);
     renderStickers();
     persist();
-    status.textContent = `${stickerById.get(sticker.id).name}已收回裝飾品欄。`;
+    status.textContent = `${stickerById.get(sticker.id).name}${collected.includes(sticker.id) ? '已收回裝飾品欄' : '已從畫布移除'}。`;
   }
 
   function startDrag(event, id, node, sticker) {
@@ -482,6 +512,20 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     }
   };
   trayButton.onclick = () => setTrayOpen(tray.hidden);
+  resetCollection.onclick = () => {
+    stop();
+    collected = changeRewardCollection(state, false);
+    delete trayButton.dataset.new;
+    renderInventory();
+    persist();
+    restoreCollection.focus();
+  };
+  restoreCollection.onclick = () => {
+    collected = changeRewardCollection(state, true);
+    renderInventory();
+    persist();
+    resetCollection.focus();
+  };
   document.addEventListener('pointerdown', event => {
     if (!tray.hidden && !tray.contains(event.target) && !trayButton.contains(event.target) &&
         !event.target.closest('.placed-sticker')) setTrayOpen(false);

@@ -460,9 +460,17 @@ p { line-height: 1.62; }
   pointer-events: none;
 }
 .board #reward-chest { width: clamp(100px, 24vmin, 175px); height: auto; overflow: visible; }
-#reward-chest { animation: reward-chest-arrive .36s cubic-bezier(.22,.9,.3,1.25) both; }
-#reward-lid { transform-origin: 60px 50px; animation: reward-lid-open .32s .28s ease-out both; }
-#reward-sparks { transform-origin: 60px 37px; animation: reward-sparks .62s .32s ease-out both; }
+#reward-chest { animation: reward-chest-arrive .52s cubic-bezier(.22,.9,.3,1.15) both; }
+#reward-lid { transform-origin: 60px 50px; animation: reward-lid-open .64s .43s ease-in-out both; }
+#reward-chest-light, #reward-chest-shine {
+  transform-origin: 60px 54px;
+  animation: reward-chest-light 2.1s .51s ease-out both;
+}
+#reward-sparks {
+  transform-origin: 60px 43px;
+  animation: reward-sparks 1.95s .68s ease-out both;
+  filter: drop-shadow(0 0 4px #fff1a8);
+}
 .reward-floating-sticker {
   position: fixed;
   z-index: 10;
@@ -482,13 +490,22 @@ p { line-height: 1.62; }
   from { transform: none; }
   to { transform: translateY(-18px) rotate(-12deg) scaleY(.73); }
 }
+@keyframes reward-chest-light {
+  0% { transform: scale(.22); opacity: 0; }
+  30% { transform: scale(1.05); opacity: 1; }
+  63% { transform: scale(1.12); opacity: .78; }
+  100% { transform: scale(1.23); opacity: 0; }
+}
 @keyframes reward-sparks {
-  0% { transform: scale(.35); opacity: 0; }
-  40% { transform: scale(1.05); opacity: 1; }
-  100% { transform: scale(1.22); opacity: 0; }
+  0% { transform: scale(.35) translateY(14px); opacity: 0; }
+  36% { transform: scale(1.09) translateY(-4px); opacity: 1; }
+  73% { transform: scale(1.17) translateY(-10px); opacity: .77; }
+  100% { transform: scale(1.26) translateY(-18px); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  #reward-chest, #reward-lid, #reward-sparks { animation: none; }
+  #reward-chest, #reward-lid, #reward-chest-light, #reward-chest-shine, #reward-sparks { animation: none; }
+  #reward-lid { transform: translateY(-18px) rotate(-12deg) scaleY(.73); }
+  #reward-chest-light, #reward-sparks { opacity: .65; }
 }
 @media (max-width: 450px), (max-height: 520px) {
   #reward-hud { inset: 5px 5px auto; }
