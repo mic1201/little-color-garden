@@ -5,6 +5,40 @@ Private, buildless tablet drawing/coloring app. Static ES modules in `dist/`; no
 ## Run and verify
 `npm run check` runs JavaScript syntax validation. `npm test` runs the pure engine/pattern contracts. Preview: `python3 -m http.server 4185 --directory dist`. No dependency installation or compile step is required. Browser real-touch and iPad export tests are separate from code-level tests.
 
+## iOS、iPadOS 與 Android App
+
+App 以 Sites 的 v11 原始碼（`83052b6`）為基礎，透過 Capacitor 把 `dist/` 的畫布、線稿和填色資料包進安裝檔。畫畫、自由點填色、背景音樂與暫存作品可離線使用。「大人幫手」可用系統分享選單匯出完整 PNG。App 和瀏覽器分別使用自己的本機暫存；兩邊的畫作不會自動同步。
+
+### 本機建置
+
+準備 Node.js 22 以上。iOS 和 iPadOS 使用 Xcode 26 以上。Android 使用 JDK 21 和 Android SDK 36。
+
+```sh
+npm ci
+npm run check
+npm test
+npm run mobile:sync
+npm run mobile:ios
+```
+
+在 Xcode 的 `App` 方案選擇 iPhone 或 iPad 模擬器執行。Android 可以用 `npm run mobile:android` 開啟，或從 `android/` 執行 `./gradlew :app:assembleDebug`。APK 路徑為 `android/app/build/outputs/apk/debug/app-debug.apk`。每次修改 `dist/` 後，先執行 `npm run mobile:sync` 再建置。
+
+### 測試與上架
+
+- 依恐龍練字島的做法，先用模擬器及實機確認直向、橫向、離線畫畫、填色、重新開啟畫作與匯出，再依平台打包。App 識別碼為 `tw.mic1201.littlecolorgarden`，目前版本為 `1.0.9`（build 10）。
+- iOS 以 App 專屬識別碼及開發者團隊在 Xcode Archive，檢查版本、圖示及隱私資訊後送 TestFlight。Android 的 `./gradlew :app:bundleRelease` 會產生 AAB；Play 測試與正式發行需使用本 App 的上傳金鑰簽署。
+- 商店名稱、圖示、截圖、支援／隱私網址及年齡與資料揭露，應以本 App 的實際內容填寫。若以兒童為目標受眾，送審時依各商店的兒童 App 規範填報。
+
+### 1.0.9 試用版
+
+- App 開啟即全螢幕。畫布下方固定一套工具列，選筆與選色會開啟各自的選單。全螢幕開關在「大人幫手」，兩種顯示模式共用同一套工具。
+- 按色圓可直接選八個單色或彩虹色。彩虹色可套用於畫筆和畫桶。若需要別的顏色，按「自訂顏色」開啟光譜，點一下或拖曳後放開手指套用。
+- 🪣 切換自由點填色，先從調色盤選顏色。點線稿外的空白可填背景，自由畫的整張畫紙也可填色。數字、對應色與匯出圖上的數字已移除，既有暫存的填色模式會自動讀入。
+- 三首配樂由 `scripts/compose-music.py` 的原創旋律和振盪器合成，音檔隨 App 安裝。App 開啟即循環播放，退到背景時暫停。瀏覽器限制自動播放時，會等第一次操作。
+- 已逐張檢查選圖器的線稿。蝴蝶翅膀、彩虹與雲朵、長耳兔兔、大象耳朵和三角龍頭部等交界都重新接合。1.0.3 補回萬聖節兩個妹妹頭女孩的四隻手和手勢，調整三角龍頭盾和兔兔花園的紅蘿蔔。1.0.4 調整三角龍眼睛、鼻孔和嘴角，將萬聖節女孩的手簡化為封閉的圓形輪廓。1.0.5 重新接合三角龍鼻角，將萬聖節角落小幽靈的外形收成圓弧。1.0.6 移除新版三角龍的小鼻孔，保留鼻角。舊畫作仍可讀取原來的線稿與填色，重選同名的新畫紙可使用新線稿。
+
+改動新版線稿後，用 `node scripts/render-fill-source.mjs <resvg-wasm 套件資料夾> --clean`，再執行 `python scripts/generate-clean-regions.py` 更新填色區域及 `python scripts/generate-paper-masks.py` 更新背景。建立背景前也需執行一次無 `--clean` 的原稿渲染。音樂重製使用 Python、NumPy 與 FFmpeg。
+
 ## Storage and safety
 A single drawing is saved to this browser's localStorage under `little-color-garden-v1`. Saving can fail (quota/private mode); the interface reports this. It is not a durable gallery or cloud backup. Pattern changes and clearing require explicit confirmation. Parents can export an opaque selected-background PNG (white for older drawings) with protected outlines and all painted strokes; displayed preview also supports long-press Save Image when download is unsupported. No child name, image or drawing is sent to an API. Hosting still uses normal private Site access.
 

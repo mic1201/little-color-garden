@@ -1,0 +1,12 @@
+{
+  "appId": "tw.mic1201.littlecolorgarden",
+  "appName": "小小畫畫花園",
+  "webDir": "dist",
+  "backgroundColor": "#fff9ed",
+  "plugins": {
+    "SystemBars": {
+      "hidden": true,
+      "style": "LIGHT"
+    }
+  }
+}

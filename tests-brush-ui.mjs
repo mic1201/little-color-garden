@@ -15,9 +15,8 @@ for(const [id,symbol,name] of stamps){
  updateBrushSummary(summary,icon,label,'eraser',id);assert.equal(icon.textContent,'▱');
  updateBrushSummary(summary,icon,label,'stamp',id);assert.equal(icon.textContent,symbol);
 }
-const html=readFileSync('dist/index.html','utf8'),app=readFileSync('dist/app.js','utf8');
+const html=readFileSync('dist/index.html','utf8');
 assert.equal((html.match(/id="brush-icon"/g)||[]).length,1);
-assert.ok(app.includes("tool=id;")&&app.includes("syncBrush();$('#brush-picker').open=false"));
-assert.ok(app.includes('stampShape=id;syncBrush();'));
-assert.ok(app.includes('for(const [id,icon,name]of brushes)'));
+assert.match(html,/<button id="brush-summary"[^>]+aria-haspopup="dialog"/);
+assert.match(html,/<dialog id="brush-picker"/);
 console.log('Selected-brush DOM updater: all 8 tools and 3 stamp shapes pass.');

@@ -5,7 +5,7 @@ import {drawFills,validFills} from './dist/fills.js';
 import {getFillRegions} from './dist/fill-regions.js';
 const region=getFillRegions('sea-turtle')[0];
 const state={pattern:'sea-turtle',fills:[{region:region.id,color:'#123456',rainbow:false}],strokes:[{tool:'eraser'}]};
-const rectangles=[];const ctx={save(){},restore(){},fillRect(...r){rectangles.push(r)},createLinearGradient(){return {addColorStop(){}}}};
+const rectangles=[];const ctx={save(){},restore(){},beginPath(){},fill(){},rect(...r){rectangles.push(r)},createLinearGradient(){return {addColorStop(){}}}};
 drawFills(ctx,state);
 assert.equal(rectangles.length,region.spans.length);
 region.spans.forEach(([y,x1,x2],i)=>assert.deepEqual(rectangles[i],[x1,y,x2-x1,1]));

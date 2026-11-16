@@ -4,7 +4,7 @@ import {patterns} from './dist/patterns.js';
 import {getNumberGuide,numberSvgMarkup} from './dist/number-patterns.js';
 assert.equal(getNumberGuide('blank'),null);assert.equal(getNumberGuide('unknown'),null);
 assert.equal(numberSvgMarkup('blank'),'');
-const pages=patterns.filter(p=>p.id!=='blank');assert.equal(pages.length,25);
+const pages=patterns.filter(p=>p.id!=='blank'&&!p.id.endsWith('-clean'));assert.equal(pages.length,25);
 for(const p of pages){
  const g=getNumberGuide(p.id);assert.ok(g,`${p.id} has a guide`);
  assert.ok(g.palette.length>=2&&g.palette.length<=7,p.id);

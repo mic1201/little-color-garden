@@ -3,7 +3,20 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests.mjs && node tests-viewport.mjs && node tests-brushes.mjs && node tests-brush-ui.mjs && node tests-ui-integration.mjs && node tests-patterns.mjs && node tests-rainbow.mjs && node tests-icon-ui.mjs && node tests-number-patterns.mjs && node tests-fill-regions.mjs && node tests-fill-render.mjs && node tests-parrot.mjs && node tests-paper.mjs && node tests-v10.mjs && node tests-halloween.mjs",
-    "check": "node --check dist/app.js && node --check dist/engine.js && node --check dist/patterns.js && node --check dist/viewport.js && node --check dist/brush-ui.js && node --check dist/number-patterns.js && node --check dist/fills.js && node --check dist/fill-regions.js && node --check dist/paper.js && node --check dist/rich-patterns.js && node --check dist/halloween-pattern.js"
+    "test": "node tests.mjs && node tests-viewport.mjs && node tests-brushes.mjs && node tests-brush-ui.mjs && node tests-ui-integration.mjs && node tests-patterns.mjs && node tests-rainbow.mjs && node tests-icon-ui.mjs && node tests-number-patterns.mjs && node tests-fill-regions.mjs && node tests-fill-render.mjs && node tests-parrot.mjs && node tests-paper.mjs && node tests-v10.mjs && node tests-halloween.mjs && node tests-music.mjs",
+    "check": "node --check dist/app.js && node --check dist/engine.js && node --check dist/patterns.js && node --check dist/viewport.js && node --check dist/brush-ui.js && node --check dist/number-patterns.js && node --check dist/fills.js && node --check dist/fill-regions.js && node --check dist/paper.js && node --check dist/rich-patterns.js && node --check dist/halloween-pattern.js && node --check dist/music.js && node --check dist/clean-patterns.js && node --check dist/clean-fill-regions.js && node --check dist/paper-masks.js && node --check dist/color-spectrum.js",
+    "mobile:sync": "cap sync",
+    "mobile:ios": "cap open ios",
+    "mobile:android": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.2",
+    "@capacitor/core": "8.6.2",
+    "@capacitor/filesystem": "8.1.5",
+    "@capacitor/ios": "8.6.2",
+    "@capacitor/share": "8.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.2"
   }
 }

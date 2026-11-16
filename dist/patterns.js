@@ -1,6 +1,7 @@
+import {revisedPatterns} from './clean-patterns.js';
 import {halloweenPattern} from './halloween-pattern.js';
 import {richPatterns} from './rich-patterns.js';
-export const patterns=[
+const originalPatterns=[
 {id:'blank',category:'free',name:'自由畫',icon:'✨',shapes:''},
 {id:'cat',category:'animals',name:'小貓咪',icon:'🐱',shapes:`<path d="M280 290 280 145 390 215 Q500 165 610 215 L720 145 720 290 Q785 355 730 455 Q690 525 500 530 Q310 525 270 455 Q215 355 280 290Z"/><path d="M318 250 318 205 358 235 M642 235 682 205 682 250"/><ellipse cx="500" cy="647" rx="170" ry="135"/><path d="M665 665 Q815 735 825 605 Q820 555 780 570 Q750 585 785 605"/><path d="M425 650 425 755 M575 650 575 755 M390 775 445 775 M555 775 610 775"/><path d="M355 353 Q390 325 425 353 M575 353 Q610 325 645 353 M480 395 Q500 375 520 395 L500 415Z M500 415 Q470 455 440 425 M500 415 Q530 455 560 425 M340 400 225 380 M340 425 220 430 M660 400 775 380 M660 425 780 430"/>`},
 {id:'butterfly',category:'animals',name:'蝴蝶',icon:'🦋',shapes:`<path d="M480 450 C240 70 80 245 240 475 C110 680 370 830 480 530 M520 450 C760 70 920 245 760 475 C890 680 630 830 520 530"/><ellipse cx="500" cy="477" rx="35" ry="170"/><path d="M485 315 Q435 225 400 250 M515 315 Q565 225 600 250"/><circle cx="340" cy="360" r="65"/><circle cx="660" cy="360" r="65"/><ellipse cx="350" cy="580" rx="60" ry="75"/><ellipse cx="650" cy="580" rx="60" ry="75"/>`},
@@ -22,6 +23,18 @@ export const patterns=[
 {id:"sailboat",name:"小帆船",icon:"⛵",category:"vehicles",shapes:`<path d="M170 600 830 600 725 760 290 760Z M510 170 510 600 M485 205 250 560 485 560Z M540 270 765 560 540 560Z M510 170 510 110 620 140 510 170"/><circle cx="370" cy="670" r="30"/><circle cx="500" cy="670" r="30"/><circle cx="630" cy="670" r="30"/><path d="M100 810 Q200 770 300 810 T500 810 T700 810 T900 810"/><circle cx="780" cy="180" r="55"/><path d="M780 85 780 60 M780 300 780 275 M685 180 660 180 M875 180 900 180"/>`} ,
 {id:'parrot',name:'彩色鸚鵡',icon:'🦜',category:'animals',shapes:`<path d="M390 580 350 805 Q405 835 450 790 L480 610Z M480 610 450 790 Q505 825 555 785 L545 590Z"/><path d="M350 340 C300 180 460 100 580 170 Q660 210 650 300 Q680 370 620 420 C710 650 550 720 400 610 Q315 510 350 340Z"/><path d="M650 245 Q790 255 730 365 Q680 330 650 310Z"/><ellipse cx="545" cy="270" rx="65" ry="70"/><circle cx="555" cy="250" r="12"/><path d="M420 370 C570 360 630 510 535 600 Q405 590 395 450 Q390 405 420 370Z"/><ellipse cx="480" cy="520" rx="45" ry="50"/><path d="M250 735 Q500 710 750 735 L750 770 Q500 745 250 770Z"/><path d="M460 655 455 730 M525 665 525 730 M435 735 475 735 M505 735 545 735"/>`}
 ,...richPatterns,halloweenPattern];
+const versions = originalPatterns.map(pattern => [...revisedPatterns(pattern).reverse(), pattern]);
+export const patterns = versions.flat();
+const visibleIds = new Set(versions.map(([latest]) => latest.id).filter(id => id !== 'parrot'));
+
+export function isLegacyPattern(id) {
+  return !visibleIds.has(id);
+}
+
+export function availablePatterns(currentId) {
+  return patterns.filter(pattern => pattern.id === currentId || !isLegacyPattern(pattern.id));
+}
+
 export function svgMarkup(id){const p=patterns.find(p=>p.id===id)||patterns[0];return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 900"><g fill="none" stroke="#37424c" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">${p.shapes}</g></svg>`}
 export const patternCategories=[
 {id:'ocean',name:'海洋',icon:'🐳'},

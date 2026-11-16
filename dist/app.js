@@ -1,24 +1,31 @@
 import {ORIGINAL_PAPER,paperView,paperPoint,includePoint,rasterSize,beginPaper,paperMarkup} from './paper.js';
-import {regionAt} from './fill-regions.js';
-import {drawFills,validFills} from './fills.js';
-import {getNumberGuide,numberSvgMarkup,closureSvgMarkup} from './number-patterns.js';
+import {createMusic} from './music.js';
+import {clampSpectrum,spectrumColor,spectrumName} from './color-spectrum.js';
+import {drawFills,fillTarget,RAINBOW_COLORS,validFills} from './fills.js';
+import {closureSvgMarkup} from './number-patterns.js';
 import {brushes,stamps,updateBrushSummary} from './brush-ui.js';
-import {fitBoard,createFocusMode} from './viewport.js';
-import {patterns,patternCategories,svgMarkup} from './patterns.js';
+import {createFocusMode} from './viewport.js';
+import {patterns,patternCategories,availablePatterns,isLegacyPattern,svgMarkup} from './patterns.js';
 import {W,H,MAX_STROKES,MAX_POINTS,coordinate,drawStroke,validDocument,backgroundColor} from './engine.js';
 const $=s=>document.querySelector(s),canvas=$('#ink'),ctx=canvas.getContext('2d'),KEY='little-color-garden-v1';
-const palette=[['#ed7976','草莓紅'],['#f5aa62','橘子橙'],['#f3d36b','陽光黃'],['#8bbf83','嫩葉綠'],['#70b8b1','湖水綠'],['#7ba8d3','天空藍'],['#a89bcc','葡萄紫'],['#e3a0b8','櫻花粉'],['#9f7e69','可可棕'],['#42545b','石頭黑'],['#e83456','莓果紅'],['#ff7648','珊瑚橘'],['#ffe135','亮亮黃'],['#39a66d','森林綠'],['#26c6c1','薄荷青'],['#2583dc','海洋藍'],['#7455c6','魔法紫'],['#f16ec3','糖果粉'],['#754b36','巧克力'],['#ffffff','白色']];
+const BASIC_COLORS = [
+  ['紅色',{x:.005,y:.28}],['橘色',{x:.078,y:.5}],
+  ['黃色',{x:.15,y:.5}],['綠色',{x:.3,y:.62}],
+  ['藍色',{x:.58,y:.55}],['紫色',{x:.762,y:.6}],
+  ['黑色',{x:0,y:1}],['白色',{x:0,y:0}]
+];
+let colorPosition = BASIC_COLORS[0][1];
 let stampShape='star',rainbow=false;
-let state={version:1,pattern:'blank',strokes:[]},redo=[],color=palette[0][0],tool='marker',size=20,active=null,pointer=null,frame=0,saving=0,confirmAction=null,exportUrl=null,restoreMessage='',saveFailed=false;
-try{const raw=localStorage.getItem(KEY);if(raw){const parsed=JSON.parse(raw);if(validDocument(parsed,patterns.map(p=>p.id))&&validFills(parsed))state=parsed;else restoreMessage='舊暫存無法讀取；請另存喜歡的作品。'}}catch{restoreMessage='瀏覽器無法讀取暫存，離開前請儲存圖片。'}
+let state={version:1,pattern:'blank',strokes:[]},redo=[],color=spectrumColor(colorPosition),tool='marker',size=20,active=null,pointer=null,frame=0,saving=0,confirmAction=null,exportUrl=null,restoreMessage='',saveFailed=false;
+try{const raw=localStorage.getItem(KEY);if(raw){const parsed=JSON.parse(raw);if(validDocument(parsed,patterns.map(p=>p.id))&&validFills(parsed)){const {numbers,...drawing}=parsed;state={...drawing,fillMode:drawing.fillMode??(numbers===true)}}else restoreMessage='舊暫存無法讀取；請另存喜歡的作品。'}}catch{restoreMessage='瀏覽器無法讀取暫存，離開前請儲存圖片。'}
 let view={...ORIGINAL_PAPER};
 let history=[...(state.fills||[]).map(fill=>({kind:'fill',region:fill.region,before:null,after:fill})),...state.strokes.map(stroke=>({kind:'stroke',stroke}))];
 const liveInk=document.createElement('canvas');liveInk.width=W;liveInk.height=H;const liveInkCtx=liveInk.getContext('2d');
 const filled=document.createElement('canvas');filled.width=W;filled.height=H;const filledCtx=filled.getContext('2d');
 const committed=document.createElement('canvas');committed.width=W;committed.height=H;const committedCtx=committed.getContext('2d');let dirty=true;
-function updateOverlays(){ $('#outline').innerHTML=paperMarkup(outlineMarkup(state.pattern),view);$('#number-guide').innerHTML=state.numbers===true?paperMarkup(numberSvgMarkup(state.pattern),view):'' }
+function updateOverlays(){ $('#outline').innerHTML=paperMarkup(outlineMarkup(state.pattern),view) }
 function paintInk(target,layer,area,preview=false){beginPaper(target,layer,area);for(const stroke of state.strokes)drawStroke(target,stroke);if(preview&&active)drawStroke(target,active);target.setTransform(1,0,0,1,0,0)}
-function render(){frame=0;$('#board').style.background=backgroundColor(state);if(dirty){beginPaper(filledCtx,filled,view);drawFills(filledCtx,state);filledCtx.setTransform(1,0,0,1,0,0);paintInk(committedCtx,committed,view);dirty=false}ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(filled,0,0);if(active){liveInkCtx.setTransform(1,0,0,1,0,0);liveInkCtx.clearRect(0,0,liveInk.width,liveInk.height);liveInkCtx.drawImage(committed,0,0);liveInkCtx.setTransform(liveInk.width/view.width,0,0,liveInk.height/view.height,-view.x*liveInk.width/view.width,-view.y*liveInk.height/view.height);drawStroke(liveInkCtx,active);liveInkCtx.setTransform(1,0,0,1,0,0);ctx.drawImage(liveInk,0,0)}else ctx.drawImage(committed,0,0);$('#welcome').hidden=state.pattern!=='blank'||state.strokes.length>0||!!active;$('#welcome').style.display=$('#welcome').hidden?'none':'';$('#undo').disabled=!history.length;$('#focus-undo').disabled=!history.length;$('#redo').disabled=!redo.length}
+function render(){frame=0;$('#board').style.background=backgroundColor(state);if(dirty){beginPaper(filledCtx,filled,view);drawFills(filledCtx,state,view);filledCtx.setTransform(1,0,0,1,0,0);paintInk(committedCtx,committed,view);dirty=false}ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(filled,0,0);if(active){liveInkCtx.setTransform(1,0,0,1,0,0);liveInkCtx.clearRect(0,0,liveInk.width,liveInk.height);liveInkCtx.drawImage(committed,0,0);liveInkCtx.setTransform(liveInk.width/view.width,0,0,liveInk.height/view.height,-view.x*liveInk.width/view.width,-view.y*liveInk.height/view.height);drawStroke(liveInkCtx,active);liveInkCtx.setTransform(1,0,0,1,0,0);ctx.drawImage(liveInk,0,0)}else ctx.drawImage(committed,0,0);$('#welcome').hidden=state.pattern!=='blank'||state.strokes.length>0||!!state.fills?.length||!!active;$('#welcome').style.display=$('#welcome').hidden?'none':'';$('#undo').disabled=!history.length;$('#redo').disabled=!redo.length}
 function pointAt(x,y,rect){return paperPoint(x,y,rect,view)}
 function rememberPoint(p){state.paper=includePoint(state.paper,p,size*2)}
 function schedule(){if(!frame)frame=requestAnimationFrame(render)}
@@ -27,65 +34,363 @@ $('#storage-warning').onclick=()=>{finish();$('#parent-dialog').showModal()};
 function save(){clearTimeout(saving);try{localStorage.setItem(KEY,JSON.stringify(state));saveFailed=false;$('#storage-warning').hidden=true;$('#save-status').textContent='✓ 已暫存在這台裝置'}catch{saveFailed=true;storageWarning('暫存空間不足，請大人儲存圖片。')}}
 function changed(){dirty=true;render();saving=setTimeout(save,300)}
 function finish(){if(pointer===null)return;const id=pointer;pointer=null;if(canvas.hasPointerCapture(id))canvas.releasePointerCapture(id);if(active?.points.length){state.strokes.push(active);history.push({kind:'stroke',stroke:active});redo=[]}active=null;changed()}
-function setPattern(id){finish();state={version:1,pattern:id,background:backgroundColor(state),numbers:state.numbers===true,strokes:[]};history=[];redo=[];$('#outline').innerHTML=outlineMarkup(id);syncNumbers();requestAnimationFrame(fit);const p=patterns.find(p=>p.id===id);$('#picture-title').textContent=p.icon+' '+p.name;document.querySelectorAll('.pattern').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===id)));changed()}
+function setPattern(id){finish();state={version:1,pattern:id,background:backgroundColor(state),fillMode:state.fillMode===true,strokes:[]};history=[];redo=[];$('#outline').innerHTML=outlineMarkup(id);syncFillMode();requestAnimationFrame(fit);const p=patterns.find(p=>p.id===id);$('#picture-title').textContent=p.icon+' '+p.name;document.querySelectorAll('.pattern').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===id)));filterPatterns();changed()}
 function ask(title,message,fn,target=state.pattern){finish();const preview=$('#confirm-preview');preview.replaceChildren();const before=document.createElement('div');before.className='confirm-sheet';before.style.background=backgroundColor(state);if(typeof canvas.toDataURL==='function'){const image=document.createElement('img');image.src=canvas.toDataURL('image/png');image.alt='';before.append(image)}const lines=document.createElement('div');lines.innerHTML=paperMarkup(outlineMarkup(state.pattern),view);before.style.aspectRatio=String(view.width/view.height);before.append(lines);const arrow=document.createElement('span');arrow.textContent='→';const after=document.createElement('div');after.className='confirm-sheet';after.style.background=backgroundColor(state);after.innerHTML=outlineMarkup(target);preview.append(before,arrow,after);confirmAction=fn;$('#confirm-title').textContent=title;$('#confirm-message').textContent=message;$('#confirm-dialog').showModal()}
-for(const [hex,name]of palette){const b=document.createElement('button');b.className='color';b.style.background=hex;b.setAttribute('aria-label',name);b.setAttribute('aria-pressed',String(hex===color));b.dataset.color=hex;b.onclick=()=>{finish();color=hex;rainbow=false;syncColor(name);$('#color-dialog').close()};$('#colors').append(b)}
-function syncBrush(){updateBrushSummary($('#brush-summary'),$('#brush-icon'),$('#brush-name'),tool,stampShape)}
+const brushPicker = $('#brush-picker');
+const stampOptions = $('#stamp-options');
+function syncBrush() {
+  updateBrushSummary($('#brush-summary'),$('#brush-icon'),$('#brush-name'),tool,stampShape);
+}
+$('#brush-summary').onclick = () => {
+  finish();
+  brushPicker.showModal();
+};
+$('#brush-close').onclick = () => brushPicker.close();
 syncBrush();
-for(const [id,icon,name]of brushes){const b=document.createElement('button');b.className='tool';b.innerHTML=`<span class="tool-icon">${icon}</span><span class="sr-only">${name}</span>`;b.setAttribute('aria-label',name);b.setAttribute('aria-pressed',String(id===tool));b.onclick=()=>{finish();tool=id;$('#stamp-options').hidden=id!=='stamp';syncBrush();$('#brush-picker').open=false;document.querySelectorAll('.tool').forEach(x=>x.setAttribute('aria-pressed',String(x===b)))};$('#tools').append(b)}
-for(const [id,icon,name] of stamps){const b=document.createElement('button');b.className='stamp-choice';b.textContent=icon;b.setAttribute('aria-label',name+'印章');b.setAttribute('aria-pressed',String(id===stampShape));b.onclick=()=>{finish();stampShape=id;syncBrush();document.querySelectorAll('.stamp-choice').forEach(x=>x.setAttribute('aria-pressed',String(x===b)))};$('#stamp-options').append(b)}
+for (const [id,icon,name] of brushes) {
+  const button = document.createElement('button');
+  button.className = 'tool';
+  button.dataset.tool = id;
+  button.innerHTML = `<span class="tool-icon" aria-hidden="true">${icon}</span><span class="sr-only">${name}</span>`;
+  button.setAttribute('aria-label',name);
+  button.setAttribute('aria-pressed',String(id===tool));
+  button.onclick = () => {
+    finish();
+    tool = id;
+    syncBrush();
+    stampOptions.hidden = tool!=='stamp';
+    for (const entry of document.querySelectorAll('.tool')) {
+      entry.setAttribute('aria-pressed',String(entry===button));
+    }
+    if (state.fillMode) {
+      state.fillMode = false;
+      syncFillMode();
+      save();
+    }
+    if (stampOptions.hidden) brushPicker.close();
+  };
+  $('#tools').append(button);
+}
+for (const [id,icon,name] of stamps) {
+  const button = document.createElement('button');
+  button.className = 'stamp-choice';
+  button.textContent = icon;
+  button.setAttribute('aria-label',name+'印章');
+  button.setAttribute('aria-pressed',String(id===stampShape));
+  button.onclick = () => {
+    finish();
+    stampShape = id;
+    syncBrush();
+    for (const entry of document.querySelectorAll('.stamp-choice')) {
+      entry.setAttribute('aria-pressed',String(entry===button));
+    }
+    brushPicker.close();
+  };
+  stampOptions.append(button);
+}
 for(const [n,label,px]of [[9,'細筆',5],[20,'中筆',10],[38,'粗筆',17]]){const b=document.createElement('button');b.className='size';b.innerHTML=`<span style="width:${px}px;height:${px}px"></span>`;b.setAttribute('aria-label',label);b.setAttribute('aria-pressed',String(n===size));b.onclick=()=>{finish();size=n;document.querySelectorAll('.size').forEach(x=>x.setAttribute('aria-pressed',String(x===b)))};$('#sizes').append(b)}
 let patternCategory='all';
-function filterPatterns(){document.querySelectorAll('.pattern').forEach(b=>{b.hidden=patternCategory!=='all'&&b.dataset.category!==patternCategory});document.querySelectorAll('.category-choice').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===patternCategory)));requestAnimationFrame(fit)}
+function filterPatterns(){document.querySelectorAll('.pattern').forEach(b=>{b.hidden=(b.dataset.legacy==='true'&&b.dataset.id!==state.pattern)||(patternCategory!=='all'&&b.dataset.category!==patternCategory)});document.querySelectorAll('.category-choice').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===patternCategory)));requestAnimationFrame(fit)}
 for(const c of [{id:'all',name:'全部',icon:'✨'},...patternCategories]){const b=document.createElement('button');b.className='category-choice';b.dataset.id=c.id;b.textContent=c.icon;b.title=c.name+'圖案';b.setAttribute('aria-label',c.name+'圖案');b.setAttribute('aria-pressed',String(c.id==='all'));b.onclick=()=>{finish();patternCategory=c.id;filterPatterns()};$('#pattern-categories').append(b)}
-for(const p of patterns.filter(p=>p.id!=='parrot'||state.pattern==='parrot')){const b=document.createElement('button');b.className='pattern';b.dataset.id=p.id;b.dataset.category=p.category;b.setAttribute('aria-pressed',String(p.id===state.pattern));b.innerHTML=(p.id==='blank'?'<span class="blank-icon">✨</span>':outlineMarkup(p.id))+`<span class="sr-only">${p.name}</span>`;b.setAttribute('aria-label',p.name+'畫紙');b.title=p.name;b.onclick=()=>{$('#pattern-dialog').close();if(p.id===state.pattern)return;if(state.strokes.length||state.fills?.length||active)ask('換一張圖案嗎？','這張畫會被換掉。喜歡的作品，先請大人幫忙存成圖片。',()=>setPattern(p.id),p.id);else setPattern(p.id)};$('#patterns').append(b)}
-canvas.addEventListener('pointerdown',e=>{if(pointer!==null||!e.isPrimary||(e.pointerType==='mouse'&&e.button!==0))return;e.preventDefault();if(state.numbers===true&&getNumberGuide(state.pattern)){const point=pointAt(e.clientX,e.clientY,canvas.getBoundingClientRect());fillAt(point);return}if(state.strokes.length>=MAX_STROKES||state.strokes.reduce((n,s)=>n+s.points.length,0)>=MAX_POINTS-15000){storageWarning('這張畫很豐富了！請大人儲存，再開新畫。');return}pointer=e.pointerId;canvas.setPointerCapture(pointer);active={tool,color,rainbow:tool!=='eraser'&&rainbow,size,stamp:stampShape,seed:crypto.getRandomValues(new Uint32Array(1))[0],points:[pointAt(e.clientX,e.clientY,canvas.getBoundingClientRect())]};rememberPoint(active.points[0]);schedule()});
+for(const p of availablePatterns(state.pattern)){const b=document.createElement('button');const legacy=isLegacyPattern(p.id);const caption=legacy?p.name+'（舊稿）':p.name;b.className='pattern';b.dataset.id=p.id;b.dataset.category=p.category;b.dataset.legacy=String(legacy);b.setAttribute('aria-pressed',String(p.id===state.pattern));b.innerHTML=(p.id==='blank'?'<span class="blank-icon">✨</span>':outlineMarkup(p.id))+`<span class="${legacy?'legacy-caption':'sr-only'}">${legacy?'舊稿':p.name}</span>`;b.setAttribute('aria-label',caption+'畫紙');b.title=caption;b.onclick=()=>{$('#pattern-dialog').close();if(p.id===state.pattern)return;if(state.strokes.length||state.fills?.length||active)ask('換一張圖案嗎？','這張畫會被換掉。喜歡的作品，先請大人幫忙存成圖片。',()=>setPattern(p.id),p.id);else setPattern(p.id)};$('#patterns').append(b)}
+canvas.addEventListener('pointerdown',e=>{if(pointer!==null||!e.isPrimary||(e.pointerType==='mouse'&&e.button!==0))return;e.preventDefault();if(state.fillMode){const point=pointAt(e.clientX,e.clientY,canvas.getBoundingClientRect());fillAt(point);return}if(state.strokes.length>=MAX_STROKES||state.strokes.reduce((n,s)=>n+s.points.length,0)>=MAX_POINTS-15000){storageWarning('這張畫很豐富了！請大人儲存，再開新畫。');return}pointer=e.pointerId;canvas.setPointerCapture(pointer);active={tool,color,rainbow:tool!=='eraser'&&rainbow,size,stamp:stampShape,seed:crypto.getRandomValues(new Uint32Array(1))[0],points:[pointAt(e.clientX,e.clientY,canvas.getBoundingClientRect())]};rememberPoint(active.points[0]);schedule()});
 canvas.addEventListener('pointermove',e=>{if(e.pointerId!==pointer||!active)return;e.preventDefault();const rect=canvas.getBoundingClientRect();const events=e.getCoalescedEvents?.();for(const ev of events?.length?events:[e]){const p=pointAt(ev.clientX,ev.clientY,rect),last=active.points.at(-1);if(Math.hypot(p.x-last.x,p.y-last.y)>1.3&&active.points.length<14999){active.points.push(p);rememberPoint(p)}}schedule()});
 for(const event of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(event,e=>{if(e.pointerId===pointer)finish()});
 window.addEventListener('blur',finish);window.addEventListener('pagehide',()=>{finish();save()});document.addEventListener('visibilitychange',()=>{if(document.hidden){finish();save()}});window.addEventListener('resize',finish);
-$('#undo').onclick=()=>{finish();const a=history.pop();if(a){if(a.kind==='stroke')state.strokes.pop();else if(a.kind==='fill')restoreFill(a.region,a.before);else state.background=a.before;redo.push(a)}syncBackground();changed()};$('#redo').onclick=()=>{finish();const a=redo.pop();if(a){if(a.kind==='stroke')state.strokes.push(a.stroke);else if(a.kind==='fill')restoreFill(a.region,a.after);else state.background=a.after;history.push(a)}syncBackground();changed()};
+$('#undo').onclick=()=>{finish();const a=history.pop();if(a){if(a.kind==='stroke')state.strokes.pop();else restoreFill(a.region,a.before);redo.push(a)}changed()};$('#redo').onclick=()=>{finish();const a=redo.pop();if(a){if(a.kind==='stroke')state.strokes.push(a.stroke);else restoreFill(a.region,a.after);history.push(a)}changed()};
 $('#parent').onclick=()=>{finish();$('#parent-dialog').showModal()};$('[data-close]').onclick=()=>$('#parent-dialog').close();$('#cancel').onclick=()=>{$('#confirm-dialog').close();confirmAction=null};$('#confirm').onclick=()=>{const action=confirmAction;confirmAction=null;$('#confirm-dialog').close();action?.()};$('#confirm-dialog').addEventListener('cancel',()=>confirmAction=null);
 $('#clear').onclick=()=>{$('#parent-dialog').close();ask('換一張乾淨的紙嗎？','現在的顏色會清掉，圖案保留。請先儲存想留下的作品。',()=>setPattern(state.pattern))};
-$('#export').onclick=async()=>{finish();const b=$('#export');b.disabled=true;b.textContent='正在準備圖片…';try{const area=paperView(view.width,view.height,state.paper),output=document.createElement('canvas'),dimensions=rasterSize(area,4096);output.width=dimensions.width;output.height=dimensions.height;const c=output.getContext('2d');c.fillStyle=backgroundColor(state);c.fillRect(0,0,output.width,output.height);c.save();c.setTransform(output.width/area.width,0,0,output.height/area.height,-area.x*output.width/area.width,-area.y*output.height/area.height);drawFills(c,state);c.restore();const ink=document.createElement('canvas');ink.width=output.width;ink.height=output.height;paintInk(ink.getContext('2d'),ink,area);c.drawImage(ink,0,0);const svg=new Blob([paperMarkup(exportMarkup(),area)],{type:'image/svg+xml'}),url=URL.createObjectURL(svg),img=new Image();try{await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});c.drawImage(img,0,0,output.width,output.height)}finally{URL.revokeObjectURL(url)}const blob=await new Promise(resolve=>output.toBlob(resolve,'image/png'));if(!blob)throw Error();if(exportUrl)URL.revokeObjectURL(exportUrl);exportUrl=URL.createObjectURL(blob);$('#export-preview').replaceChildren();const preview=document.createElement('img');preview.src=exportUrl;preview.alt='完成的畫作，可長按儲存';const a=document.createElement('a');a.href=exportUrl;a.download='我的小小畫作.png';a.textContent='下載圖片（或長按上圖儲存）';$('#export-preview').append(preview,a);a.click();}catch{$('#export-preview').textContent='圖片暫時無法產生，請再試一次。作品仍在畫布上。'}finally{b.disabled=false;b.textContent='↓ 儲存作品 PNG'}};
+const nativeApp = window.Capacitor?.isNativePlatform();
+const exportButton = $('#export');
+const exportLabel = nativeApp ? '分享作品 PNG' : '↓ 儲存作品 PNG';
+if (nativeApp) {
+  exportButton.textContent = exportLabel;
+  $('#storage-help').textContent = '畫作暫存在這個 App。移除 App 或清除 App 資料會移除暫存，喜歡的作品可以分享成 PNG。';
+  $('#export-help').textContent = '用系統分享選單儲存或傳送圖片。直向、橫向都可以畫。';
+}
+
+async function createArtworkPng() {
+  const area = paperView(view.width, view.height, state.paper);
+  const dimensions = rasterSize(area, 4096);
+  const output = document.createElement('canvas');
+  const ink = document.createElement('canvas');
+  output.width = ink.width = dimensions.width;
+  output.height = ink.height = dimensions.height;
+  const context = output.getContext('2d');
+  context.fillStyle = backgroundColor(state);
+  context.fillRect(0, 0, output.width, output.height);
+  context.save();
+  context.setTransform(output.width / area.width, 0, 0, output.height / area.height,
+    -area.x * output.width / area.width, -area.y * output.height / area.height);
+  drawFills(context, state, area);
+  context.restore();
+  paintInk(ink.getContext('2d'), ink, area);
+  context.drawImage(ink, 0, 0);
+
+  const outline = new Blob([paperMarkup(exportMarkup(), area)], {type: 'image/svg+xml'});
+  const outlineUrl = URL.createObjectURL(outline);
+  try {
+    const image = new Image();
+    await new Promise((resolve, reject) => {
+      image.onload = resolve;
+      image.onerror = reject;
+      image.src = outlineUrl;
+    });
+    context.drawImage(image, 0, 0, output.width, output.height);
+  } finally {
+    URL.revokeObjectURL(outlineUrl);
+  }
+  const png = await new Promise(resolve => output.toBlob(resolve, 'image/png'));
+  if (!png) throw new Error('PNG encoding failed');
+  return png;
+}
+
+async function shareArtwork(png) {
+  const {Filesystem, Share} = window.Capacitor.Plugins;
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(png);
+  });
+  const {uri} = await Filesystem.writeFile({
+    path: `artwork/小小畫作-${Date.now()}.png`,
+    directory: 'CACHE',
+    data: dataUrl.slice(dataUrl.indexOf(',') + 1),
+    recursive: true
+  });
+  try {
+    await Share.share({files: [uri], dialogTitle: '分享小小畫作'});
+  } catch (error) {
+    if (error.message !== 'Share canceled') throw error;
+  }
+}
+
+exportButton.onclick = async () => {
+  finish();
+  exportButton.disabled = true;
+  exportButton.textContent = '正在準備圖片…';
+  const panel = $('#export-preview');
+  try {
+    const png = await createArtworkPng();
+    if (exportUrl) URL.revokeObjectURL(exportUrl);
+    exportUrl = URL.createObjectURL(png);
+    const preview = document.createElement('img');
+    preview.src = exportUrl;
+    preview.alt = nativeApp ? '完成的畫作' : '完成的畫作，可長按儲存';
+    panel.replaceChildren(preview);
+    if (nativeApp) {
+      try {
+        await shareArtwork(png);
+      } catch {
+        const notice = document.createElement('p');
+        notice.setAttribute('role', 'status');
+        notice.textContent = '暫時無法分享圖片，請再試一次。作品仍在畫布上。';
+        panel.append(notice);
+      }
+    } else {
+      const download = document.createElement('a');
+      download.href = exportUrl;
+      download.download = '我的小小畫作.png';
+      download.textContent = '下載圖片（或長按上圖儲存）';
+      panel.append(download);
+      download.click();
+    }
+  } catch {
+    panel.textContent = '圖片暫時無法產生，請再試一次。作品仍在畫布上。';
+  } finally {
+    exportButton.disabled = false;
+    exportButton.textContent = exportLabel;
+  }
+};
 $('#outline').innerHTML=outlineMarkup(state.pattern);const p=patterns.find(p=>p.id===state.pattern);$('#picture-title').textContent=p.icon+' '+p.name;render();if(restoreMessage)storageWarning(restoreMessage);
 
 // Resize only the presentation; vector coordinates and the stored document stay intact.
 const app=$('.app'),board=$('#board'),paper=$('.paper-frame');
 function fit(){const r=paper.getBoundingClientRect();const width=Math.max(1,r.width),height=Math.max(1,r.height);view=paperView(width,height,state.paper);board.style.width=width+'px';board.style.height=height+'px';const dimensions=rasterSize(view);for(const layer of [canvas,filled,committed,liveInk]){layer.width=dimensions.width;layer.height=dimensions.height}updateOverlays();dirty=true;render()}
 
-const focusMode=createFocusMode({root:document.documentElement,doc:document,onChange:({focused,tools,native})=>{finish();document.body.classList.toggle('focus-mode',focused);document.body.classList.toggle('show-focus-tools',focused&&tools);$('.focus-controls').hidden=!focused;$('#focus-label').textContent=native?'全螢幕畫畫':'大畫布模式';$('#focus-tools').textContent=tools?'⌄':'🎨';$('#focus-tools').setAttribute('aria-label',tools?'收起工具':'顯示工具');$('#focus-tools').title=tools?'收起工具':'顯示工具';$('#focus-tools').setAttribute('aria-expanded',String(tools));requestAnimationFrame(fit)}});
-$('#focus-enter').onclick=()=>focusMode.enter();$('#focus-exit').onclick=()=>focusMode.exit();$('#focus-tools').onclick=()=>focusMode.toggleTools();$('#focus-undo').onclick=()=>$('#undo').click();
-for(const event of ['fullscreenchange','webkitfullscreenchange'])document.addEventListener(event,()=>focusMode.change());
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&focusMode.getState().focused&&!document.querySelector('dialog[open]'))focusMode.exit()});
-$('#brush-picker').addEventListener('toggle',()=>{finish();requestAnimationFrame(fit)});
-$('#pattern-open').onclick=openPatterns;$('#focus-patterns').onclick=openPatterns;$('#pattern-close').onclick=()=>$('#pattern-dialog').close();
-function openPatterns(){finish();$('#brush-picker').open=false;$('#pattern-dialog').showModal()}
+let barsHidden;
+const systemBars = nativeApp && window.Capacitor.Plugins.SystemBars;
+const fullscreenToggle = $('#fullscreen-toggle');
+const focusMode = createFocusMode({
+  root: document.documentElement,
+  doc: document,
+  onChange({focused}) {
+    finish();
+    fullscreenToggle.setAttribute('aria-pressed',String(focused));
+    if (systemBars && barsHidden !== focused) {
+      barsHidden = focused;
+      void systemBars[focused ? 'hide' : 'show']({}).catch(() => {});
+    }
+    requestAnimationFrame(fit);
+  }
+});
+function enterFocus() {
+  return focusMode.enter({systemFullscreen: !nativeApp});
+}
+fullscreenToggle.onclick = () => focusMode.getState().focused ? focusMode.exit() : enterFocus();
+for (const event of ['fullscreenchange','webkitfullscreenchange']) {
+  document.addEventListener(event,() => focusMode.change());
+}
+document.addEventListener('keydown',event => {
+  if (event.key==='Escape' && focusMode.getState().focused && !document.querySelector('dialog[open]')) {
+    void focusMode.exit();
+  }
+});
+$('#pattern-open').onclick = () => {
+  finish();
+  $('#pattern-dialog').showModal();
+};
+$('#pattern-close').onclick = () => $('#pattern-dialog').close();
 if(typeof ResizeObserver!=='undefined')new ResizeObserver(()=>{finish();fit()}).observe(paper);
 window.addEventListener('resize',fit);window.visualViewport?.addEventListener('resize',fit);requestAnimationFrame(fit);
 
-const backgrounds=[['#ffffff','白色'],['#fff4d6','奶油黃'],['#fce6ed','淺粉紅'],['#e5f2fc','天空藍'],['#e7f3df','嫩綠'],['#eee7fa','淡紫']];
-function syncBackground(){document.querySelectorAll('.background-choice').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.color===backgroundColor(state))));$('#background-open').style.background=backgroundColor(state)}
-for(const [hex,name]of backgrounds){const b=document.createElement('button');b.className='background-choice';b.dataset.color=hex;b.style.background=hex;b.innerHTML='<span aria-hidden="true">▧</span>';b.title=name+'畫紙';b.setAttribute('aria-label',name+'畫紙');b.onclick=()=>{finish();const before=backgroundColor(state);if(before!==hex){state.background=hex;history.push({kind:'background',before,after:hex});redo=[];changed()}syncBackground();$('#background-dialog').close()};$('#background-colors').append(b)}
-syncBackground();$('#background-open').onclick=()=>{finish();syncBackground();$('#background-dialog').showModal()};$('#background-close').onclick=()=>$('#background-dialog').close();
+const colorDialog = $('#color-dialog');
+const colorButton = $('#color-open');
+const colorSpectrum = $('#color-spectrum');
+const spectrumSelection = $('#spectrum-selection');
+const customColorButton = $('#custom-color-open');
+const backToBasicColors = $('#basic-colors-back');
+let spectrumPointer = null;
+let draftColorPosition = colorPosition;
 
-function syncColor(name){$('#current-color').style.background=rainbow?'linear-gradient(120deg,#ef476f,#ffd166,#06d6a0,#118ab2,#9b5de5)':color;$('#color-name').textContent=rainbow?'彩虹筆色':name||palette.find(p=>p[0]===color)?.[1]||'我的顏色';$('#color-open').setAttribute('aria-label','目前筆色：'+$('#color-name').textContent+'，點一下選顏色');document.querySelectorAll('.color').forEach(b=>b.setAttribute('aria-pressed',String(!rainbow&&b.dataset.color===color)));$('#rainbow-color').setAttribute('aria-pressed',String(rainbow));$('#custom-color').value=color;syncNumberSelection()}
-$('#color-open').onclick=()=>{finish();$('#color-dialog').showModal()};$('#color-close').onclick=()=>$('#color-dialog').close();
-$('#custom-color').addEventListener('input',e=>{const value=e.target.value;if(!/^#[0-9a-f]{6}$/i.test(value))return;finish();color=value.toLowerCase();rainbow=false;syncColor('我的顏色')});
-$('#rainbow-color').onclick=()=>{finish();rainbow=true;syncColor();$('#color-dialog').close()};syncColor();
-
-// A separate guide overlay: never painted into the saved ink layer.
-function outlineMarkup(id){const base=svgMarkup(id);return base.replace('</svg>',closureSvgMarkup(id).replace(/^<svg[^>]*>/,'').replace('</svg>','')+'</svg>')}
-function exportMarkup(){const base=outlineMarkup(state.pattern);return state.numbers===true?base.replace('</svg>',numberSvgMarkup(state.pattern).replace(/^<svg[^>]*>/,'').replace('</svg>','')+'</svg>'):base}
-function syncNumberSelection(){document.querySelectorAll('.number-color').forEach(b=>b.setAttribute('aria-pressed',String(!rainbow&&color===b.dataset.color)))}
-function syncNumbers(){const guide=getNumberGuide(state.pattern),on=state.numbers===true;
- for(const id of ['#numbers-toggle','#focus-numbers']){$(id).disabled=!guide;$(id).setAttribute('aria-pressed',String(on&&!!guide))}
- $('#number-guide').innerHTML=on&&guide?paperMarkup(numberSvgMarkup(state.pattern),view):'';
- const tray=$('#number-colors');tray.replaceChildren();tray.hidden=!(on&&guide);
- if(on&&guide)for(const entry of guide.palette){const b=document.createElement('button');b.className='number-color';b.style.background=entry.color;b.dataset.color=entry.color;b.textContent=String(entry.number);b.title=entry.number+'：'+entry.name;b.setAttribute('aria-label',entry.number+'號，'+entry.name);b.onclick=()=>{finish();color=entry.color;rainbow=false;if(tool==='eraser'){tool='marker';syncBrush();$('#stamp-options').hidden=true;document.querySelectorAll('.tool').forEach((x,i)=>x.setAttribute('aria-pressed',String(brushes[i][0]===tool)))}syncColor(entry.name);syncNumberSelection()};tray.append(b)}
- syncNumberSelection();requestAnimationFrame(fit);
+const rainbowPreview = `linear-gradient(135deg,${RAINBOW_COLORS.join(',')})`;
+function syncColorSwatch() {
+  $('#current-color').style.background = rainbow ? rainbowPreview : color;
+  const selected = rainbow ? undefined : basicSwatches.find(swatch => swatch.hex===color);
+  const name = rainbow ? '彩虹色' : (selected?.name || spectrumName(colorPosition));
+  colorButton.setAttribute('aria-label','選顏色，目前是'+name);
+  for (const swatch of basicSwatches) {
+    swatch.button.setAttribute('aria-pressed',String(swatch===selected));
+  }
+  rainbowSwatch.setAttribute('aria-pressed',String(rainbow));
 }
-function toggleNumbers(){finish();if(!getNumberGuide(state.pattern))return;state.numbers=state.numbers!==true;syncNumbers();save()}
-$('#numbers-toggle').onclick=toggleNumbers;$('#focus-numbers').onclick=toggleNumbers;syncNumbers();
+function previewColor(position) {
+  draftColorPosition = position;
+  spectrumSelection.style.left = `clamp(14px, ${position.x*100}%, calc(100% - 14px))`;
+  spectrumSelection.style.top = `clamp(14px, ${position.y*100}%, calc(100% - 14px))`;
+  spectrumSelection.style.background = spectrumColor(position);
+  colorSpectrum.setAttribute('aria-valuenow',String(Math.round(position.x*100)));
+  colorSpectrum.setAttribute('aria-valuetext',spectrumName(position));
+}
+function positionOnSpectrum(event) {
+  const rect = colorSpectrum.getBoundingClientRect();
+  const width = colorSpectrum.clientWidth || rect.width;
+  const height = colorSpectrum.clientHeight || rect.height;
+  return {
+    x: clampSpectrum((event.clientX-rect.left-(colorSpectrum.clientLeft||0))/width),
+    y: clampSpectrum((event.clientY-rect.top-(colorSpectrum.clientTop||0))/height)
+  };
+}
+function applyColor(position=draftColorPosition,useRainbow=false) {
+  rainbow = useRainbow;
+  colorPosition = position;
+  color = spectrumColor(colorPosition);
+  syncColorSwatch();
+  colorDialog.close();
+}
+const basicSwatches = BASIC_COLORS.map(([name,position]) => {
+  const button = document.createElement('button');
+  const hex = spectrumColor(position);
+  button.className = 'basic-swatch';
+  button.style.background = hex;
+  button.setAttribute('aria-label',name);
+  button.title = name;
+  button.onclick = () => applyColor(position);
+  $('#basic-colors').append(button);
+  return {name,hex,button};
+});
+const rainbowSwatch = document.createElement('button');
+rainbowSwatch.className = 'basic-swatch';
+rainbowSwatch.style.background = rainbowPreview;
+rainbowSwatch.setAttribute('aria-label','彩虹色');
+rainbowSwatch.title = '彩虹色';
+rainbowSwatch.onclick = () => applyColor(colorPosition,true);
+$('#basic-colors').append(rainbowSwatch);
+
+function showColorPanel(custom) {
+  if (!custom) spectrumPointer = null;
+  $('#basic-palette').hidden = custom;
+  $('#spectrum-panel').hidden = !custom;
+  backToBasicColors.hidden = !custom;
+  $('#color-title').textContent = custom ? '自訂顏色' : '選顏色';
+}
+colorButton.onclick = () => {
+  finish();
+  showColorPanel(false);
+  colorDialog.showModal();
+};
+customColorButton.onclick = () => {
+  showColorPanel(true);
+  previewColor(colorPosition);
+  colorSpectrum.focus({preventScroll:true});
+};
+backToBasicColors.onclick = () => {
+  showColorPanel(false);
+  customColorButton.focus({preventScroll:true});
+};
+$('#color-close').onclick = () => colorDialog.close();
+colorDialog.addEventListener('close',() => { spectrumPointer = null; });
+colorSpectrum.addEventListener('pointerdown',event => {
+  if (spectrumPointer!==null || (event.pointerType==='mouse' && event.button!==0)) return;
+  event.preventDefault();
+  spectrumPointer = event.pointerId;
+  colorSpectrum.setPointerCapture(event.pointerId);
+  previewColor(positionOnSpectrum(event));
+});
+colorSpectrum.addEventListener('pointermove',event => {
+  if (event.pointerId===spectrumPointer) previewColor(positionOnSpectrum(event));
+});
+colorSpectrum.addEventListener('pointerup',event => {
+  if (event.pointerId!==spectrumPointer) return;
+  spectrumPointer = null;
+  previewColor(positionOnSpectrum(event));
+  applyColor();
+});
+function cancelSpectrumGesture(event) {
+  if (event.pointerId!==spectrumPointer) return;
+  spectrumPointer = null;
+  previewColor(colorPosition);
+}
+colorSpectrum.addEventListener('pointercancel',cancelSpectrumGesture);
+colorSpectrum.addEventListener('lostpointercapture',cancelSpectrumGesture);
+colorSpectrum.addEventListener('keydown',event => {
+  const steps = {ArrowLeft:[-.025,0],ArrowRight:[.025,0],ArrowUp:[0,-.04],ArrowDown:[0,.04]};
+  const step = steps[event.key];
+  if (step) {
+    event.preventDefault();
+    previewColor({x:clampSpectrum(draftColorPosition.x+step[0]), y:clampSpectrum(draftColorPosition.y+step[1])});
+  }
+  if (event.key==='Enter' || event.key===' ') {
+    event.preventDefault();
+    applyColor();
+  }
+});
+syncColorSwatch();
+
+// Keep the fill boundaries for earlier artwork, including saved v1 drawings.
+function outlineMarkup(id){const base=svgMarkup(id);return base.replace('</svg>',closureSvgMarkup(id).replace(/^<svg[^>]*>/,'').replace('</svg>','')+'</svg>')}
+function exportMarkup(){return outlineMarkup(state.pattern)}
+function syncFillMode() {
+  $('#fill-toggle').setAttribute('aria-pressed', String(!!state.fillMode));
+  canvas.setAttribute('aria-label', state.fillMode
+    ? '點填色畫布，選色後點圖案區塊或畫紙背景' : '畫畫區，用手指或觸控筆拖曳繪畫');
+}
+$('#fill-toggle').onclick = () => {
+  finish();
+  state.fillMode = !state.fillMode;
+  syncFillMode();
+  save();
+};
+syncFillMode();
+if (nativeApp) void enterFocus();
+
+const music = createMusic({audio: $('#soundtrack'), visible: !document.hidden});
+document.addEventListener('pointerup', music.start);
+document.addEventListener('keydown', music.start);
+document.addEventListener('visibilitychange', () => music.setVisible(!document.hidden));
+window.addEventListener('pagehide', () => music.setVisible(false));
+window.addEventListener('pageshow', () => music.setVisible(!document.hidden));
 
 function restoreFill(region,fill){state.fills=(state.fills||[]).filter(f=>f.region!==region);if(fill)state.fills.push(fill)}
-function fillAt(point){const region=regionAt(state.pattern,point.x,point.y);if(!region)return;const before=(state.fills||[]).find(f=>f.region===region.id)||null;const after={region:region.id,color,rainbow};if(before&&before.color===after.color&&before.rainbow===after.rainbow)return;restoreFill(region.id,after);history.push({kind:'fill',region:region.id,before,after});redo=[];changed()}
+function fillAt(point){const region=fillTarget(state.pattern,point.x,point.y);if(!region)return;const before=(state.fills||[]).find(f=>f.region===region)||null;const after={region,color,rainbow};if(before?.color===color&&before.rainbow===rainbow)return;restoreFill(region,after);history.push({kind:'fill',region,before,after});redo=[];changed()}

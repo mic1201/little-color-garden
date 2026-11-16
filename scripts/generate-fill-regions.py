@@ -41,9 +41,9 @@ for path in sorted(glob.glob('/tmp/lcg-fill/*.png')):
   r.update(bounds=[int(xs.min()),int(ys.min()),int(xs.max())+1,int(ys.max())+1],spans=spans);output.append(r)
  paint.alpha_composite(im);paint.thumbnail((250,225));tile=Image.new('RGB',(250,250),'white');tile.paste(paint,(0,20));ImageDraw.Draw(tile).text((5,3),ident,fill='black');thumbs.append(tile);all_regions[ident]=output
 with open('dist/fill-regions.js','w') as f:
- f.write('// Generated bounded regions from original SVG line art; x2 is exclusive.\nconst regions='+json.dumps(all_regions,separators=(',',':'))+';\n')
+ f.write('// Generated bounded regions from original SVG line art; x2 is exclusive.\nimport {cleanFillRegions} from "./clean-fill-regions.js";\nconst regions='+json.dumps(all_regions,separators=(',',':'))+';\n')
  f.write('const extraLabels='+json.dumps(extra_labels,separators=(',',':'))+';\nexport function getExtraFillLabels(pattern){return extraLabels[pattern]||[]}\n')
- f.write('''export function getFillRegions(pattern){return regions[pattern]||[]}
+ f.write('''export function getFillRegions(pattern){return regions[pattern] || cleanFillRegions[pattern] || []}
 export function regionAt(pattern,x,y){
  if(!Number.isFinite(x)||!Number.isFinite(y)||x<0||y<0||x>=1000||y>=900)return null;
  x=Math.floor(x);y=Math.floor(y);
