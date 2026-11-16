@@ -1,7 +1,7 @@
 import {drawStroke, H, W} from './engine.js';
 import {getFillRegions} from './fill-regions.js';
 
-export const REWARD_THRESHOLD = 85;
+export const REWARD_THRESHOLD = 97;
 
 export function countPaintedArea(regions, fills, ink) {
   let total = 0;

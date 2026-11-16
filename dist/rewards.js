@@ -113,6 +113,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   const trayButton = document.querySelector('#reward-open');
   const inventory = document.querySelector('#reward-inventory');
   const emptyTray = document.querySelector('#reward-empty');
+  emptyTray.textContent = `塗色達到 ${REWARD_THRESHOLD}% 就能收集裝飾品。`;
   const status = document.querySelector('#reward-status');
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const measure = createPaintProgress();
