@@ -433,7 +433,8 @@ function fillAt(point) {
 }
 
 if (!nativeApp && document.createElementNS) {
-  rewards = createRewards({board, ink: canvas, getState: () => state, canCelebrate: () => pointer === null, motionArtwork, save});
+  const debugPlayback = new URLSearchParams(window.location.search).get('debug') === '1';
+  rewards = createRewards({board, ink: canvas, getState: () => state, canCelebrate: () => pointer === null, motionArtwork, save, debugPlayback});
   rewards.resize(view);
   rewards.sync();
 }
