@@ -18,6 +18,12 @@ await get("#export").onclick();assert.equal(get("#export-preview").children.leng
 const fullscreen = get('#fullscreen-toggle');
 const fixedBrush = get('#brush-summary');
 const fixedColor = get('#color-open');
+const bucketTool = () => get('#tools').children.find(button => button.dataset.tool === 'fill');
+const toggleFill = () => {
+  fixedBrush.onclick();
+  if (api.getState().fillMode) get('#tools').children[0].onclick();
+  else bucketTool().onclick();
+};
 await fullscreen.onclick();
 assert.equal(fullscreen.attrs['aria-pressed'],'true');
 assert.equal(get('#brush-summary'),fixedBrush);
@@ -72,7 +78,7 @@ cv.events.pointerdown(event(8,60,60));cv.events.pointerup(event(8,60,60));
 const originalStrokes=JSON.stringify(api.getState().strokes);
 const pastelColor = chooseSpectrum(0,.275);
 assert.equal(pastelColor,'#ff8989');
-get('#fill-toggle').onclick();
+toggleFill();
 cv.events.pointerdown(event(9,14,24));cv.events.pointerup(event(9,14,24));
 const filledPaper = {region:fills.PAPER_REGION,color:pastelColor,rainbow:false};
 assert.deepEqual(api.getState().fills,[filledPaper]);
@@ -82,7 +88,7 @@ get('#undo').onclick();assert.equal(api.getState().fills.length,0);assert.equal(
 get('#redo').onclick();assert.deepEqual(api.getState().fills,[filledPaper]);
 let exportBackground; context.fill=rule=>{if(rule==='evenodd')exportBackground=context.fillStyle};
 await get('#export').onclick();assert.equal(exportBackground,pastelColor);
-get('#fill-toggle').onclick();
+toggleFill();
 get('#tools').children.find(b=>b.attrs['aria-label']==='橡皮擦').onclick();cv.events.pointerdown(event(9,60,60));cv.events.pointerup(event(9,60,60));assert.equal(api.getState().strokes.at(-1).tool,'eraser');assert.deepEqual(api.getState().fills,[filledPaper]);
 get('#clear').onclick();get('#confirm').onclick();assert(!api.getState().fills?.length);assert.equal(api.getState().strokes.length,0);
 const old={version:1,pattern:'blank',strokes:[],background:'#fce6ed'};assert(engine.validDocument(old,['blank']));assert.equal(engine.backgroundColor(old),'#fce6ed');assert(!engine.validDocument({...old,background:'url(bad)'},['blank']));
@@ -171,13 +177,13 @@ console.log('PASS icon-only generated controls, retained labels, picture confirm
 const savedSetter=localStorage.setItem;localStorage.setItem=()=>{throw Error('quota')};api.save();assert.equal(get('#storage-warning').hidden,false);get('#storage-warning').onclick();assert.equal(get('#parent-dialog').open,true);assert.match(get('#save-status').textContent,/暫存空間不足/);localStorage.setItem=savedSetter;api.save();assert.equal(get('#storage-warning').hidden,true);console.log('PASS visible storage warning and parent details with recovery.');
 
 const savedDrawing=JSON.stringify(api.getState().strokes);const savedBackground=api.getState().background;
-get('#fill-toggle').onclick();assert.equal(api.getState().fillMode,true);assert.equal(get('#fill-toggle').attrs['aria-pressed'],'true');assert(!api.exportMarkup().includes('<text '));
-get('#fill-toggle').onclick();assert.equal(api.getState().fillMode,false);assert.equal(JSON.stringify(api.getState().strokes),savedDrawing);assert.equal(api.getState().background,savedBackground);
-get('#fill-toggle').onclick();api.save();assert.equal(JSON.parse([...store.values()][0]).fillMode,true);assert(engine.validDocument(JSON.parse([...store.values()][0]),pats.patterns.map(p=>p.id)));assert(!engine.validDocument({...api.getState(),fillMode:'yes'},pats.patterns.map(p=>p.id)));
+toggleFill();assert.equal(api.getState().fillMode,true);assert.equal(bucketTool().attrs['aria-pressed'],'true');assert.equal(get('#brush-icon').textContent,'🪣');assert.equal(fixedBrush.dataset.activeTool,'fill');assert(!api.exportMarkup().includes('<text '));
+toggleFill();assert.equal(api.getState().fillMode,false);assert.equal(JSON.stringify(api.getState().strokes),savedDrawing);assert.equal(api.getState().background,savedBackground);
+toggleFill();api.save();assert.equal(JSON.parse([...store.values()][0]).fillMode,true);assert(engine.validDocument(JSON.parse([...store.values()][0]),pats.patterns.map(p=>p.id)));assert(!engine.validDocument({...api.getState(),fillMode:'yes'},pats.patterns.map(p=>p.id)));
 await get('#fullscreen-toggle').onclick();get('#pattern-open').onclick();assert.equal(get('#pattern-dialog').open,true);get('#pattern-close').onclick();assert.equal(get('#pattern-dialog').open,false);assert.equal(JSON.stringify(api.getState().strokes),savedDrawing);
 get('#pattern-open').onclick();get('#patterns').children.find(p=>p.dataset.id==='sea-turtle-clean').onclick();assert.equal(get('#pattern-dialog').open,false);assert.equal(get('#confirm-dialog').open,true);get('#cancel').onclick();assert.equal(JSON.stringify(api.getState().strokes),savedDrawing);
-get('#pattern-open').onclick();get('#patterns').children.find(p=>p.dataset.id==='sea-turtle-clean').onclick();get('#confirm').onclick();assert.equal(api.getState().pattern,'sea-turtle-clean');assert.equal(api.getState().fillMode,true);assert.equal(get('#fill-toggle').attrs['aria-pressed'],'true');
-get('#patterns').children.find(p=>p.dataset.id==='blank').onclick();assert.equal(get('#fill-toggle').attrs['aria-pressed'],'true');await get('#fullscreen-toggle').onclick();
+get('#pattern-open').onclick();get('#patterns').children.find(p=>p.dataset.id==='sea-turtle-clean').onclick();get('#confirm').onclick();assert.equal(api.getState().pattern,'sea-turtle-clean');assert.equal(api.getState().fillMode,true);assert.equal(bucketTool().attrs['aria-pressed'],'true');
+get('#patterns').children.find(p=>p.dataset.id==='blank').onclick();assert.equal(bucketTool().attrs['aria-pressed'],'true');await get('#fullscreen-toggle').onclick();
 console.log('PASS tap-fill mode preserves ink, background, state, fullscreen picker and blank-paper fill mode.');
 
 // Tap-to-fill works with any selected color, independent of brush selection.
@@ -196,11 +202,11 @@ assert.notDeepEqual(firstGradient, secondGradient);
 get('#undo').onclick();assert.deepEqual(api.getState().fills[0].gradient, firstGradient);
 get('#redo').onclick();assert.deepEqual(api.getState().fills[0].gradient, secondGradient);
 chooseSpectrum(.5,.3);tap(106,490,455);assert.equal(api.getState().fills[0].rainbow,false);api.save();assert(fills.validFills(JSON.parse([...store.values()][0])));
-get('#fill-toggle').onclick();assert.equal(api.getState().fillMode,false);assert.equal(api.getState().fills.length,1);get('#tools').children[0].onclick();tap(105,500,450);assert.equal(api.getState().strokes.length,1);
-get('#fill-toggle').onclick();assert.equal(api.getState().fills.length,1);get('#patterns').children.find(p=>p.dataset.id==='blank').onclick();assert.equal(get('#confirm-dialog').open,true);get('#cancel').onclick();assert.equal(api.getState().fills.length,1);get('#patterns').children.find(p=>p.dataset.id==='blank').onclick();get('#confirm').onclick();assert(!api.getState().fills?.length);
+toggleFill();assert.equal(api.getState().fillMode,false);assert.equal(api.getState().fills.length,1);get('#tools').children[0].onclick();tap(105,500,450);assert.equal(api.getState().strokes.length,1);
+toggleFill();assert.equal(api.getState().fills.length,1);get('#patterns').children.find(p=>p.dataset.id==='blank').onclick();assert.equal(get('#confirm-dialog').open,true);get('#cancel').onclick();assert.equal(api.getState().fills.length,1);get('#patterns').children.find(p=>p.dataset.id==='blank').onclick();get('#confirm').onclick();assert(!api.getState().fills?.length);
 console.log('PASS selected spectrum tap fill, recolor, undo/redo, background fill, persistence, free drawing, and replacement confirmation.');
 
-get('#fill-toggle').onclick();
+toggleFill();
 // Actual app wiring: every visible white corner receives ink, including old dead margins.
 get('.paper-frame').getBoundingClientRect=()=>({left:10,top:20,width:1700,height:780});
 cv.getBoundingClientRect=()=>({left:10,top:20,width:1700,height:780});api.fit();const wide=api.getView();assert(wide.x<0);assert.equal(get('#board').style.width,'1700px');
@@ -209,21 +215,21 @@ const edgeStroke=api.getState().strokes.at(-1);assert(edgeStroke.points[0].x<0);
 get('#undo').onclick();assert.equal(api.getState().strokes.length,0);get('#redo').onclick();assert.deepEqual(api.getState().strokes.at(-1),edgeStroke);
 get('.paper-frame').getBoundingClientRect=()=>({left:10,top:20,width:780,height:1700});api.fit();const portrait=api.getView();assert(portrait.x<=edgeStroke.points[0].x);assert(portrait.x+portrait.width>=edgeStroke.points[1].x);assert.deepEqual(api.getState().strokes.at(-1),edgeStroke);
 await get('#export').onclick();assert.equal(get('#export').disabled,false);console.log('PASS app full-white-paper edge ink, undo/redo, saved bounds, rotation retains all artwork, PNG export path.');
-get('#patterns').children.find(p=>p.dataset.id==='parrot-cute-clean').onclick();get('#confirm').onclick();if(!api.getState().fillMode)get('#fill-toggle').onclick();
+get('#patterns').children.find(p=>p.dataset.id==='parrot-cute-clean').onclick();get('#confirm').onclick();if(!api.getState().fillMode)toggleFill();
 const pr=fillRegions.getFillRegions('parrot-cute-clean')[0];const [py,px1,px2]=pr.spans[Math.floor(pr.spans.length/2)];
 for(const [width,height]of [[1700,780],[780,1700]]){get('.paper-frame').getBoundingClientRect=()=>({left:10,top:20,width,height});cv.getBoundingClientRect=()=>({left:10,top:20,width,height});api.fit();const v=api.getView();const x=10+((px1+px2)/2-v.x)/v.width*width,y=20+(py+.5-v.y)/v.height*height;cv.events.pointerdown(event(301,x,y));assert.equal(api.getState().fills[0].region,pr.id);assert(get('#outline').innerHTML.includes(`viewBox="${v.x} ${v.y} ${v.width} ${v.height}"`));}
 console.log('PASS transformed parrot tap-fill hits and outline alignment in landscape and portrait.');
 
 // Mode toggles preserve existing contours, fills and ink.
 get('#patterns').children.find(p=>p.dataset.id==='rainbow-clean').onclick();get('#confirm').onclick();
-if(!api.getState().fillMode)get('#fill-toggle').onclick();api.fit();
+if(!api.getState().fillMode)toggleFill();api.fit();
 const rr=fillRegions.getFillRegions('rainbow-clean')[0];const rv=api.getView(),rect=cv.getBoundingClientRect();const [rx,ry]=rr.seeds[0];cv.events.pointerdown(event(401,rect.left+(rx-rv.x)/rv.width*rect.width,rect.top+(ry-rv.y)/rv.height*rect.height));assert.equal(api.getState().fills.length,1);
 const stableOutline=get('#outline').innerHTML;
 assert(stableOutline.includes('M205 576 V500'),'arc seam included in persistent line layer');
 const originalState=JSON.stringify(api.getState());
-for(let i=0;i<8;i++){get('#fill-toggle').onclick();api.fit();assert.equal(get('#outline').innerHTML,stableOutline);}
+for(let i=0;i<8;i++){toggleFill();api.fit();assert.equal(get('#outline').innerHTML,stableOutline);}
 assert.equal(JSON.stringify(api.getState()),originalState);
-if(api.getState().fillMode)get('#fill-toggle').onclick();api.fit();assert(api.exportMarkup().includes('M205 576 V500'));assert(!api.exportMarkup().includes('<text'));await get('#export').onclick();assert.equal(get('#export').disabled,false);
+if(api.getState().fillMode)toggleFill();api.fit();assert(api.exportMarkup().includes('M205 576 V500'));assert(!api.exportMarkup().includes('<text'));await get('#export').onclick();assert.equal(get('#export').disabled,false);
 console.log('PASS repeated fill-mode toggles preserve all original and closure lines with unchanged document.');
 
 const previousArt = {
@@ -236,6 +242,8 @@ store.set('little-color-garden-v1', JSON.stringify(previousArt));
 const restored = run(...Object.values(paper),...Object.values(engine),...Object.values(pats),...Object.values(viewport),...Object.values(brushUI),...Object.values(numberGuides),...Object.values(fillRegions),...Object.values(fills),...Object.values(spectrumFunctions),createMusic,document,window,localStorage,()=>1,()=>1,()=>{});
 assert.equal(restored.getState().pattern, previousArt.pattern);
 assert.equal(restored.getState().fillMode, true);
+assert.equal(bucketTool().attrs['aria-pressed'],'true');
+assert.equal(get('#brush-icon').textContent,'🪣');
 assert.deepEqual(restored.getState().fills, previousArt.fills);
 assert(!('numbers' in restored.getState()));
 assert(!restored.exportMarkup().includes('<text'));

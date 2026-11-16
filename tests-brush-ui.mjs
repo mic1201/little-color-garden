@@ -19,4 +19,4 @@ const html=readFileSync('dist/index.html','utf8');
 assert.equal((html.match(/id="brush-icon"/g)||[]).length,1);
 assert.match(html,/<button id="brush-summary"[^>]+aria-haspopup="dialog"/);
 assert.match(html,/<dialog id="brush-picker"/);
-console.log('Selected-brush DOM updater: all 8 tools and 3 stamp shapes pass.');
+console.log('Selected-brush DOM updater: all 9 tools and 3 stamp shapes pass.');

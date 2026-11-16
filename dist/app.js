@@ -36,39 +36,41 @@ $('#storage-warning').onclick=()=>{finish();$('#parent-dialog').showModal()};
 function save(){clearTimeout(saving);try{localStorage.setItem(KEY,JSON.stringify(state));saveFailed=false;$('#storage-warning').hidden=true;$('#save-status').textContent='✓ 已暫存在這台裝置'}catch{saveFailed=true;storageWarning('暫存空間不足，請大人儲存圖片。')}}
 function changed(){dirty=true;render();rewards?.stop();rewards?.sync();clearTimeout(saving);saving=setTimeout(save,300)}
 function finish(){if(pointer===null)return;const id=pointer;pointer=null;if(canvas.hasPointerCapture(id))canvas.releasePointerCapture(id);if(active?.points.length){state.strokes.push(active);history.push({kind:'stroke',stroke:active});redo=[]}active=null;changed()}
-function setPattern(id){finish();state={version:1,pattern:id,background:backgroundColor(state),fillMode:state.fillMode===true,strokes:[],rewardCollection:state.rewardCollection,rewardCollectionBackup:state.rewardCollectionBackup};history=[];redo=[];$('#outline').innerHTML=outlineMarkup(id);syncFillMode();requestAnimationFrame(fit);const p=patterns.find(p=>p.id===id);$('#picture-title').textContent=p.icon+' '+p.name;document.querySelectorAll('.pattern').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===id)));filterPatterns();changed()}
+function setPattern(id){finish();state={version:1,pattern:id,background:backgroundColor(state),fillMode:state.fillMode===true,strokes:[],rewardCollection:state.rewardCollection,rewardCollectionBackup:state.rewardCollectionBackup};history=[];redo=[];$('#outline').innerHTML=outlineMarkup(id);syncTool();requestAnimationFrame(fit);const p=patterns.find(p=>p.id===id);$('#picture-title').textContent=p.icon+' '+p.name;document.querySelectorAll('.pattern').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===id)));filterPatterns();changed()}
 function ask(title,message,fn,target=state.pattern){finish();const preview=$('#confirm-preview');preview.replaceChildren();const before=document.createElement('div');before.className='confirm-sheet';before.style.background=backgroundColor(state);if(typeof canvas.toDataURL==='function'){const image=document.createElement('img');image.src=canvas.toDataURL('image/png');image.alt='';before.append(image)}const lines=document.createElement('div');lines.innerHTML=paperMarkup(outlineMarkup(state.pattern),view);before.style.aspectRatio=String(view.width/view.height);before.append(lines);const arrow=document.createElement('span');arrow.textContent='→';const after=document.createElement('div');after.className='confirm-sheet';after.style.background=backgroundColor(state);after.innerHTML=outlineMarkup(target);preview.append(before,arrow,after);confirmAction=fn;$('#confirm-title').textContent=title;$('#confirm-message').textContent=message;$('#confirm-dialog').showModal()}
 const brushPicker = $('#brush-picker');
 const stampOptions = $('#stamp-options');
-function syncBrush() {
-  updateBrushSummary($('#brush-summary'),$('#brush-icon'),$('#brush-name'),tool,stampShape);
+function syncTool() {
+  const selected = state.fillMode ? 'fill' : tool;
+  const summary = $('#brush-summary');
+  summary.dataset.activeTool = selected;
+  updateBrushSummary(summary, $('#brush-icon'), $('#brush-name'), selected, stampShape);
+  stampOptions.hidden = selected !== 'stamp';
+  for (const entry of document.querySelectorAll('.tool')) {
+    entry.setAttribute('aria-pressed', String(entry.dataset.tool === selected));
+  }
+  canvas.setAttribute('aria-label', state.fillMode
+    ? '點填色畫布，選色後點圖案區塊或畫紙背景' : '畫畫區，用手指或觸控筆拖曳繪畫');
 }
 $('#brush-summary').onclick = () => {
   finish();
   brushPicker.showModal();
 };
 $('#brush-close').onclick = () => brushPicker.close();
-syncBrush();
 for (const [id,icon,name] of brushes) {
   const button = document.createElement('button');
   button.className = 'tool';
   button.dataset.tool = id;
   button.innerHTML = `<span class="tool-icon" aria-hidden="true">${icon}</span><span class="sr-only">${name}</span>`;
   button.setAttribute('aria-label',name);
-  button.setAttribute('aria-pressed',String(id===tool));
   button.onclick = () => {
     finish();
-    tool = id;
-    syncBrush();
-    stampOptions.hidden = tool!=='stamp';
-    for (const entry of document.querySelectorAll('.tool')) {
-      entry.setAttribute('aria-pressed',String(entry===button));
-    }
-    if (state.fillMode) {
-      state.fillMode = false;
-      syncFillMode();
-      save();
-    }
+    const isFill = id === 'fill';
+    const changedMode = !!state.fillMode !== isFill;
+    state.fillMode = isFill;
+    if (!isFill) tool = id;
+    syncTool();
+    if (changedMode) save();
     if (stampOptions.hidden) brushPicker.close();
   };
   $('#tools').append(button);
@@ -82,7 +84,7 @@ for (const [id,icon,name] of stamps) {
   button.onclick = () => {
     finish();
     stampShape = id;
-    syncBrush();
+    syncTool();
     for (const entry of document.querySelectorAll('.stamp-choice')) {
       entry.setAttribute('aria-pressed',String(entry===button));
     }
@@ -406,18 +408,7 @@ syncColorSwatch();
 // Keep the fill boundaries for earlier artwork, including saved v1 drawings.
 function outlineMarkup(id){const base=svgMarkup(id);return base.replace('</svg>',closureSvgMarkup(id).replace(/^<svg[^>]*>/,'').replace('</svg>','')+'</svg>')}
 function exportMarkup(pattern=state.pattern){return outlineMarkup(pattern)}
-function syncFillMode() {
-  $('#fill-toggle').setAttribute('aria-pressed', String(!!state.fillMode));
-  canvas.setAttribute('aria-label', state.fillMode
-    ? '點填色畫布，選色後點圖案區塊或畫紙背景' : '畫畫區，用手指或觸控筆拖曳繪畫');
-}
-$('#fill-toggle').onclick = () => {
-  finish();
-  state.fillMode = !state.fillMode;
-  syncFillMode();
-  save();
-};
-syncFillMode();
+syncTool();
 if (nativeApp) void enterFocus();
 
 const music = createMusic({audio: $('#soundtrack'), visible: !document.hidden});

@@ -12,88 +12,242 @@ const dance = (rect, period, distance, height, angle, pivot) => wave(rect, t => 
   angle: oscillate(t, period) * angle,
   pivot
 }));
+const unit = n => Math.max(0, Math.min(1, n));
+const ease = n => {
+  const u = unit(n);
+  return u * u * (3 - 2 * u);
+};
+const interval = (t, start, end) => unit((t - start) / (end - start));
+const arc = n => 4 * n * (1 - n);
+const swell = (t, period) => (1 - Math.cos(t * 2 * Math.PI / period)) / 2;
+
+const rabbitHops = [
+  [.17,.78,0,.28,88,0,.035],
+  [1.02,1.82,.28,1,112,.035,.105],
+  [2.22,2.81,1,.59,85,.105,.045],
+  [3.05,3.82,.59,0,110,.045,0]
+];
+
+function rabbitHop(t, reach, pivot) {
+  const time = t % 4.35;
+  let dx = 0, lift = 0, depth = 0, landing = 0;
+  for (const [start, end, from, to, height, near, closer] of rabbitHops) {
+    if (time < start) break;
+    const progress = interval(time, start, end);
+    dx = reach * (from + (to - from) * progress);
+    depth = near + (closer - near) * ease(progress);
+    lift = height * arc(progress);
+    landing = time >= end ? .12 * Math.sin(Math.PI * interval(time, end, end + .17)) : 0;
+  }
+  return {dx, dy: depth * 24 - lift, scaleX: 1 + depth + landing * .65, scaleY: 1 + depth - landing + lift * .00016, pivot};
+}
+
+const travelAndReturn = (t, period, reach) => {
+  const phase = (t % period) / period;
+  return reach * (ease(phase * 2) - ease((phase - .52) / .48));
+};
+
+const appleBiteTimes = [.82, 1.59, 2.34];
+const appleBites = [[802,400,54],[800,461,58],[802,519,55]];
+function appleCut(t) {
+  const phase = t % 5;
+  return phase < 4.15 ? appleBites.filter((_, index) => phase >= appleBiteTimes[index]) : [];
+}
+
+function appleCrumbs(ctx, t) {
+  const phase = t % 5;
+  appleBites.forEach(([x, y], index) => {
+    const age = phase - appleBiteTimes[index];
+    if (age < 0 || age >= .62) return;
+    ctx.globalAlpha = 1 - age / .62;
+    for (let i = 0; i < 4; i++) {
+      ctx.save();
+      ctx.translate(x - 33 + age * (62 + i * 23), y + (i - 1.5) * 10 - age * (104 - i * 18) + 146 * age * age);
+      ctx.rotate(i + age * 6);
+      ctx.fillStyle = i % 2 ? '#ffe3a3' : '#f3a78f';
+      ctx.fillRect(-5, -4, 11 - i, 8);
+      ctx.restore();
+    }
+  });
+  ctx.globalAlpha = 1;
+}
+
+function bubbles(ctx, t, [x, y], count = 5) {
+  for (let i = 0; i < count; i++) {
+    const age = (t * .62 + i * .23) % 1;
+    const fade = Math.sin(Math.PI * age);
+    const radius = 6 + (i % 3) * 4;
+    ctx.globalAlpha = fade * .58;
+    ctx.strokeStyle = '#4caac3';
+    ctx.lineWidth = 2.6;
+    ctx.fillStyle = '#d9f6fb';
+    ctx.beginPath();
+    ctx.arc(x + 8 * oscillate(age + i, .92) + (i % 3 - 1) * 22, y - age * 108, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function litWindows(windows) {
+  return (ctx, t) => {
+    windows.forEach(([x,y,rx,ry], i) => {
+      const phase = (t % 5.1) - .37 * i;
+      const intensity = ease((phase - .12) / .62) * (1 - ease((phase - 3.55) / .66));
+      if (!intensity) return;
+      ctx.save();
+      ctx.translate(x,y);
+      ctx.scale(rx,ry);
+      const glow = ctx.createRadialGradient(0,0,0,0,0,1);
+      glow.addColorStop(0, '#fff7b7');
+      glow.addColorStop(.43, '#ffd260aa');
+      glow.addColorStop(1, '#ffd26000');
+      ctx.globalAlpha = intensity;
+      ctx.fillStyle = glow;
+      ctx.fillRect(-1,-1,2,2);
+      ctx.restore();
+    });
+  };
+}
+
 const scenes = {
-  'cat-clean': [dance([225,140,878,810], 2.6, 14, 29, 2.5, [500,760])],
+  'cat-clean': [wave([225,140,878,810], t => {
+    const phase = t % 4.15;
+    const pounce = interval(phase, .79, 1.48);
+    const crouch = arc(interval(phase, .08, .89));
+    const returnHop = interval(phase, 2.42, 3.21);
+    const lift = 104 * arc(pounce) + 45 * arc(returnHop);
+    return {dx: 51 * (ease(pounce) - ease(returnHop)), dy: -lift, angle: -8 * arc(pounce), scaleX: 1 + .11 * crouch, scaleY: 1 - .16 * crouch, pivot: [500,795]};
+  })],
   'butterfly-clean': [{
     rect: [170,200,830,695],
     axis: 'x',
     offset(x, t) {
       const edge = Math.abs(x - 500);
-      const fold = Math.max(0, (edge - 45) / 310);
-      return {x: -(x - 500) * (.20 * bounce(t, 1.35)) * fold, y: -fold * 15 * bounce(t, 1.35)};
+      const fold = Math.max(0, (edge - 45) / 310) * bounce(t, .78);
+      return {x: -(x - 500) * .28 * fold, y: -18 * fold};
     },
-    pose: t => ({dy: -12 * bounce(t, 2.7)})
+    pose: t => ({dx: 48 * oscillate(t, 4.6), dy: -108 * swell(t, 4.6), angle: -8 * oscillate(t, 4.6), pivot: [500,451]})
   }],
-  'flower-clean': [{
-    rect: [265,205,741,749], axis: 'y',
-    offset: (y, t) => ({x: 22 * (1 - y / 750) * oscillate(t, 3)})
-  }],
-  'dinosaur-clean': [dance([250,285,866,790], 3, 38, 19, 2.3, [560,720])],
+  'flower-clean': [wave([265,205,741,749], t => ({
+    scaleX: 1 + .15 * swell(t, 3.8), scaleY: 1 + .13 * ease(swell(t, 3.8)), pivot: [500,739]
+  }))],
+  'dinosaur-clean': [wave([250,285,866,790], t => ({
+    dx: -travelAndReturn(t, 4.2, 59), dy: -17 * bounce(t, .66), angle: 2.4 * oscillate(t, .66), pivot: [560,769]
+  }))],
   'rainbow-clean': [
-    dance([92,222,210,344], 2.4, 0, 20, 15, [150,280]),
-    dance([783,139,886,240], 2.9, 0, 17, -14, [835,184])
+    wave([92,222,210,344], t => ({scaleX: 1 + .27 * swell(t, 2.2), scaleY: 1 + .27 * swell(t, 2.2), angle: 9 * oscillate(t, 2.2), pivot: [150,280]})),
+    wave([783,139,886,240], t => ({scaleX: 1 + .25 * swell(t, 2.9), scaleY: 1 + .25 * swell(t, 2.9), angle: -9 * oscillate(t, 2.9), pivot: [835,184]}))
   ],
   'rocket-clean': [
     cutout(
-      wave([239,137,758,833], t => ({dx: 4 * oscillate(t, .25), dy: -70 * bounce(t, 3.6), angle: 4 * oscillate(t, 3.6), pivot: [500,608]})),
+      wave([239,137,758,833], t => {
+        const phase = t % 4.9;
+        const flight = ease((phase - .36) / 1.18) - ease((phase - 2.08) / 1.7);
+        return {dx: 3 * oscillate(t, .19) * (1 - flight), dy: -150 * flight, angle: -5 * flight, pivot: [500,608]};
+      }),
       [[310,137],[700,137],[700,438],[758,459],[758,833],[239,833],[239,438],[310,420]]
     ),
-    dance([712,210,818,321], 3.2, 0, 9, 12, [762,263])
+    wave([712,210,818,321], t => ({angle: 20 * oscillate(t, 3.3), scaleX: 1 + .2 * swell(t, 1.8), scaleY: 1 + .2 * swell(t, 1.8), pivot: [762,263]}))
   ],
   'whale-clean': [
-    cutout(dance([216,192,874,716], 4.5, 36, 27, 4.5, [499,505]),
-      [[216,303],[354,303],[354,192],[489,192],[492,292],[874,320],[874,716],[216,716]]),
-    wave([128,290,212,373], t => ({dx: 5 * oscillate(t, 2.5), dy: -31 * bounce(t, 3)})),
-    wave([714,204,814,298], t => ({dx: 10 * oscillate(t, 3), dy: -20 * bounce(t, 2.8)}))
+    cutout(wave([216,192,874,716], t => {
+      const phase = t % 4.75;
+      const leap = interval(phase, .42, 2.1);
+      return {dx: -33 * (ease(leap) - ease((phase - 2.76) / 1.08)), dy: -120 * arc(leap) + 13 * arc(interval(phase, 2.1, 2.6)), angle: 14 * arc(leap) * (1 - 2 * leap), pivot: [499,505]};
+    }), [[216,303],[354,303],[354,192],[489,192],[492,292],[874,320],[874,716],[216,716]]),
+    wave([128,290,212,373], t => ({dx: -9 * swell(t, 2.7), dy: -61 * swell(t, 2.7)})),
+    wave([714,204,814,298], t => ({dx: 18 * swell(t, 3.4), dy: -39 * swell(t, 3.4)}))
   ],
-  'sea-turtle-clean': [dance([146,222,878,730], 4.8, 40, 22, -4, [490,480])],
-  'rabbit-clean': [dance([267,105,733,814], 2.2, 22, 51, 3, [500,755])],
+  'sea-turtle-clean': [{
+    ...wave([146,222,878,730], t => ({
+      dx: 51 * oscillate(t, 5.8), dy: -62 * swell(t, 5.8), angle: -8 * oscillate(t, 5.8), pivot: [490,480]
+    })),
+    detail: (ctx, t) => bubbles(ctx, t, [889,469])
+  }],
+  'rabbit-clean': [wave([267,105,733,814], t => rabbitHop(t, 133, [500,793]))],
   'elephant-clean': [{
     rect: [144,186,854,786], axis: 'y',
-    offset: (y, t) => ({x: 23 * Math.max(0, 1 - (y - 190) / 580) * oscillate(t, 2.4)}),
-    pose: t => ({angle: 2.4 * oscillate(t, 4.3), pivot: [500,740]})
+    offset(y,t) {
+      const bend = Math.sin(Math.PI * interval(y, 472, 776)) * swell(t, 3.25);
+      return {x: 52 * bend, y: -23 * bend};
+    },
+    pose: t => ({scaleY: 1 + .025 * swell(t, 3.25), pivot: [500,775]})
   }],
   'longneck-clean': [{
     rect: [247,136,863,801], axis: 'y',
     polygon: [[247,136],[863,136],[863,801],[288,801],[288,665],[247,655]],
-    offset: (y, t) => ({x: 43 * Math.max(0, Math.min(1, (518 - y) / 325)) ** 1.25 * oscillate(t, 3.5)}),
-    pose: t => ({dx: 13 * oscillate(t, 7), dy: -6 * bounce(t, 3.5)})
+    offset(y,t) {
+      const neck = unit((518 - y) / 325) ** 1.25;
+      return {x: 31 * neck * oscillate(t, 4.4), y: -36 * neck * swell(t, 4.4)};
+    },
+    pose: t => ({dy: -7 * bounce(t, 4.4)})
   }],
   'triceratops-v4-clean': [{
     rect: [167,290,910,793], axis: 'x',
-    offset: (x, t) => ({y: 19 * Math.max(0, Math.min(1, (500 - x) / 290)) * oscillate(t, 2.1)}),
-    pose: t => ({dx: 28 * oscillate(t, 4.2), dy: -9 * bounce(t, 2.1)})
+    offset: (x, t) => ({y: 34 * unit((500 - x) / 290) * bounce(t, 2.45)}),
+    pose: t => ({dx: -23 * swell(t, 4.9), dy: -12 * bounce(t, .87)})
   }],
-  'apple-clean': [dance([197,102,806,778], 2.3, 13, 23, 7, [500,715])],
-  watermelon: [dance([162,303,840,806], 2.7, 13, 17, 7.5, [500,759])],
+  'apple-clean': [{
+    ...wave([197,102,806,778], t => {
+      const time = t % 5;
+      const chew = appleBiteTimes.reduce((total, start) => total + arc(interval(time, start, start + .32)), 0);
+      const reset = arc(interval(time, 4.15, 4.7));
+      return {dy: -11 * chew - 26 * reset, scaleX: 1 + .035 * chew, scaleY: 1 - .055 * chew + .045 * reset, pivot: [500,753]};
+    }),
+    cut: appleCut,
+    detail: appleCrumbs
+  }],
+  watermelon: [wave([162,303,840,806], t => ({
+    angle: 18 * oscillate(t, 3.35), dy: -32 * swell(t, 1.675), pivot: [500,739]
+  }))],
   'princess-dress-clean': [{
     rect: [230,92,772,840], axis: 'y',
-    offset: (y, t) => ({x: 21 * Math.sin(Math.PI * Math.max(0, (y - 490) / 355) / 2) * oscillate(t, 2.9)}),
-    pose: t => ({angle: 3.5 * oscillate(t, 2.9), pivot: [500,745]})
+    offset: (y, t) => ({x: 27 * Math.sin(Math.PI * unit((y - 490) / 710)) * oscillate(t, 3.7)}),
+    pose: t => ({angle: 8 * oscillate(t, 3.7), scaleX: 1 - .35 * swell(t, 3.7), dy: -22 * swell(t, 3.7), pivot: [500,671]})
   }],
-  'princess-castle-clean': [dance([180,45,827,797], 4.8, 0, 6, 1.6, [500,780])],
+  'princess-castle-clean': [{
+    ...wave([180,45,827,797], t => ({scaleY: 1 + .012 * swell(t, 4.7), pivot: [500,780]})),
+    detail: litWindows([[292,504,33,47],[500,414,36,48],[708,504,33,47]])
+  }],
   'bus-clean': [wave([128,255,884,772], t => ({
-    dx: 48 * oscillate(t, 4.3), dy: -5 * bounce(t, .95), angle: .9 * oscillate(t, .95), pivot: [500,735]
+    dx: travelAndReturn(t, 4.4, 88), dy: -7 * bounce(t, .52), angle: .75 * oscillate(t, .52), pivot: [500,735]
   }))],
   sailboat: [wave([156,93,845,774], t => ({
-    dx: 25 * oscillate(t, 4.4), dy: 11 * oscillate(t, 3), angle: 6 * oscillate(t, 4.4), pivot: [500,665]
+    dx: 25 * oscillate(t, 4.4), dy: -37 * swell(t, 2.2), angle: 11 * oscillate(t, 4.4), pivot: [500,679]
   }))],
-  'parrot-cute-clean': [dance([279,91,721,727], 2.05, 15, 25, 5, [500,704])],
+  'parrot-cute-clean': [{
+    rect: [279,91,721,727], axis: 'x',
+    offset: (x,t) => ({y: -36 * unit((Math.abs(x - 500) - 90) / 120) * bounce(t,.59)}),
+    pose: t => {
+      const air = arc(interval(t % 4.1, .49, 2.97));
+      return {dx: -24 * air, dy: -85 * air, angle: 5 * air, pivot: [500,704]};
+    }
+  }],
   'rabbit-garden-v2-clean': [
-    dance([334,207,665,741], 2.75, 14, 37, 3, [500,705]),
-    cutout(dance([740,346,908,560], 3.8, 0, 0, 4.4, [828,550]),
+    wave([334,207,665,741], t => rabbitHop(t, 70, [500,722])),
+    cutout(wave([740,346,908,560], t => ({scaleX: 1 + .15 * swell(t, 4), scaleY: 1 + .1 * swell(t, 4), pivot: [828,550]})),
       [[740,346],[908,346],[908,560],[822,560],[822,537],[740,537]]),
   ],
   'ocean-friends-clean': [
-    wave([270,230,759,535], t => ({dx: 35 * oscillate(t, 4.1), dy: 18 * oscillate(t, 3.5), angle: 4 * oscillate(t, 4.1), pivot: [500,410]})),
-    wave([87,566,302,678], t => ({dx: 19 * oscillate(t, 3.2), dy: 14 * oscillate(t, 2.8)})),
-    wave([719,549,917,650], t => ({dx: -22 * oscillate(t, 3.2), dy: 12 * oscillate(t, 3.6)}))
+    {...wave([270,230,759,535], t => ({dx: 43 * oscillate(t, 4.1), dy: -42 * swell(t, 4.1), angle: 8 * oscillate(t, 4.1), pivot: [500,410]})),
+      detail: (ctx, t) => bubbles(ctx, t, [269,375], 4)},
+    wave([87,566,302,678], t => ({dx: 31 * oscillate(t, 3.2), dy: -37 * swell(t, 3.2)})),
+    wave([719,549,917,650], t => ({dx: -28 * oscillate(t, 3.2), dy: 28 * swell(t, 3.2)}))
   ],
-  'dino-picnic-clean': [dance([287,287,767,700], 2.8, 19, 27, -4, [519,645])],
-  'castle-garden-clean': [dance([185,104,815,686], 4.2, 0, 7, -1.5, [500,670])],
+  'dino-picnic-clean': [wave([287,287,767,700], t => {
+    const nod = bounce(t, 2.65);
+    return {dx: -29 * swell(t, 4.7), angle: -6 * nod, scaleY: 1 - .11 * nod, pivot: [519,687]};
+  })],
+  'castle-garden-clean': [{
+    ...wave([185,104,815,686], t => ({scaleY: 1 + .012 * swell(t, 4.8), pivot: [500,673]})),
+    detail: litWindows([[287,504,26,41],[500,407,25,36],[713,504,26,41]])
+  }],
   'halloween-photo-v4-clean': [
-    wave([720,288,891,461], t => ({dx: 16 * oscillate(t, 3.7), dy: -37 * bounce(t, 3.7), angle: 6 * oscillate(t, 3.7), pivot: [792,380]})),
-    cutout(dance([219,443,719,842], 2.7, 5, 24, -2.5, [466,810]),
+    wave([720,288,891,461], t => ({
+      dx: 26 * oscillate(t, 3.9), dy: -68 * swell(t, 3.9), scaleY: 1 - .12 * swell(t, 1.95), pivot: [792,380]
+    })),
+    cutout(wave([219,443,719,842], t => rabbitHop(t, 19, [466,818])),
       [[219,443],[719,443],[719,626],[685,651],[685,842],[219,842]])
   ]
 };
@@ -320,6 +474,7 @@ export function createMotionScene(state, art, parts) {
     }
     layers.push({
       ...parts[i], bounds, colors: colors.canvas,
+      silhouette: mask.path,
       outline: copy(art.outline, mask.path).canvas,
       warped: parts[i].axis ? surface(width + 2 * WARP_PADDING, height + 2 * WARP_PADDING) : null
     });
@@ -329,19 +484,25 @@ export function createMotionScene(state, art, parts) {
 
 const angleRadians = angle => (angle ?? 0) * Math.PI / 180;
 const zeroPose = {};
-const offsetAt = (part, x, y, time) => part.offset?.(part.axis === 'x' ? x : y, time) ?? zeroPose;
+function offsetAt(part, position, time) {
+  if (!part.offset) return zeroPose;
+  const start = part.axis === 'x' ? part.rect[0] : part.rect[1];
+  const end = part.axis === 'x' ? part.rect[2] : part.rect[3];
+  return part.offset(Math.max(start, Math.min(end, position)), time);
+}
 
 export function transformSticker(part, sticker, time) {
-  const offset = offsetAt(part, sticker.x, sticker.y, time);
-  const {dx = 0, dy = 0, angle = 0, pivot = [0, 0]} = part.pose?.(time) ?? zeroPose;
+  const offset = offsetAt(part, part.axis === 'x' ? sticker.x : sticker.y, time);
+  const {dx = 0, dy = 0, angle = 0, scaleX = 1, scaleY = 1, pivot = [0, 0]} = part.pose?.(time) ?? zeroPose;
   const [px, py] = pivot;
-  const x = sticker.x + (offset.x ?? 0) - px;
-  const y = sticker.y + (offset.y ?? 0) - py;
+  const x = (sticker.x + (offset.x ?? 0) - px) * scaleX;
+  const y = (sticker.y + (offset.y ?? 0) - py) * scaleY;
   const radians = angleRadians(angle);
   return {
     x: px + dx + x * Math.cos(radians) - y * Math.sin(radians),
     y: py + dy + x * Math.sin(radians) + y * Math.cos(radians),
-    angle
+    angle, scaleX, scaleY,
+    hidden: part.cut?.(time).some(([x,y,radius]) => Math.hypot(sticker.x - x, sticker.y - y) < radius) ?? false
   };
 }
 
@@ -350,12 +511,9 @@ function drawWarp(context, part, image, time, {area, sx, sy}) {
   const vertical = part.axis === 'y';
   const start = vertical ? top : left;
   const end = vertical ? bottom : right;
-  const [partLeft, partTop, partRight, partBottom] = part.rect;
   function rasterOffset(position) {
     const axis = vertical ? area.y + position / sy : area.x + position / sx;
-    const from = vertical ? partTop : partLeft;
-    const to = vertical ? partBottom : partRight;
-    const {x = 0, y = 0} = part.offset(Math.max(from, Math.min(to, axis)), time);
+    const {x = 0, y = 0} = offsetAt(part, axis, time);
     return {x: x * sx, y: y * sy};
   }
   // Rasterize shared edges at the same integer coordinate so neighboring
@@ -387,8 +545,36 @@ function drawLayer(context, image, {area, sx, sy}, padding = 0) {
   context.drawImage(image, area.x - padding / sx, area.y - padding / sy, image.width / sx, image.height / sy);
 }
 
+function clipOutsideCircle(context, [x,y,radius], area) {
+  context.beginPath();
+  context.rect(area.x - 1, area.y - 1, area.width + 2, area.height + 2);
+  context.moveTo(x + radius, y);
+  context.arc(x, y, radius, 0, Math.PI * 2);
+  context.clip('evenodd');
+}
+
+function drawBiteEdges(context, part, holes, {area, sx, sy}) {
+  context.save();
+  context.translate(area.x, area.y);
+  context.scale(1 / sx, 1 / sy);
+  context.clip(part.silhouette);
+  context.scale(sx, sy);
+  context.translate(-area.x, -area.y);
+  context.strokeStyle = '#37424c';
+  context.lineWidth = 9;
+  for (const hole of holes) {
+    context.save();
+    for (const other of holes) if (other !== hole) clipOutsideCircle(context, other, area);
+    context.beginPath();
+    context.arc(...hole, 0, Math.PI * 2);
+    context.stroke();
+    context.restore();
+  }
+  context.restore();
+}
+
 function drawPart(context, part, image, time, raster) {
-  const {dx = 0, dy = 0, angle = 0, pivot = [0, 0]} = part.pose?.(time) ?? zeroPose;
+  const {dx = 0, dy = 0, angle = 0, scaleX = 1, scaleY = 1, pivot = [0, 0]} = part.pose?.(time) ?? zeroPose;
   const [x, y] = pivot;
   if (part.warped) {
     part.warped.clearRect(0, 0, part.warped.canvas.width, part.warped.canvas.height);
@@ -400,8 +586,19 @@ function drawPart(context, part, image, time, raster) {
   context.save();
   context.translate(dx + x, dy + y);
   context.rotate(angleRadians(angle));
+  context.scale(scaleX, scaleY);
   context.translate(-x, -y);
+  const holes = part.cut?.(time);
+  if (holes?.length) {
+    context.save();
+    for (const hole of holes) clipOutsideCircle(context, hole, raster.area);
+  }
   drawLayer(context, part.warped?.canvas ?? image, raster, part.warped ? WARP_PADDING : 0);
+  if (holes?.length) {
+    context.restore();
+    if (image === part.outline) drawBiteEdges(context, part, holes, raster);
+  }
+  if (image === part.outline) part.detail?.(context, time);
   context.restore();
 }
 

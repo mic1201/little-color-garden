@@ -40,9 +40,9 @@ for (const {id} of visible) {
   for (const part of parts) {
     const [left, top, right, bottom] = part.rect;
     const sticker = {x:(left + right)/2, y:(top + bottom)/2};
-    const position = transformSticker(part, sticker, .8);
-    assert(Number.isFinite(position.x) && Number.isFinite(position.y), id);
-    assert(position.x !== sticker.x || position.y !== sticker.y || position.angle !== 0, id);
+    const poses = [.4, .8, 1.16, 1.52, 2.05, 2.55].map(time => transformSticker(part, sticker, time));
+    assert(poses.every(({x,y}) => Number.isFinite(x) && Number.isFinite(y)), id);
+    assert(poses.some(({x,y,angle,scaleX,scaleY}) => x !== sticker.x || y !== sticker.y || angle !== 0 || scaleX !== 1 || scaleY !== 1), id);
   }
 }
 const neck = motionFor('longneck-clean');
@@ -51,8 +51,19 @@ assert.equal(motionPartAt('longneck-clean', neck, {x:252,y:735}), -1);
 assert.equal(motionPartAt('longneck-clean', neck, {x:30,y:32}), -1);
 const head = transformSticker(neck[0], {x:642,y:174}, .875);
 const foot = transformSticker(neck[0], {x:377,y:733}, .875);
-assert(head.x - 642 > 40);
+assert(head.x - 642 > 25);
+assert(head.y < 174);
 assert(foot.x - 377 < 15);
+const rabbit = motionFor('rabbit-clean')[0];
+const takeoff = rabbit.pose(1.02);
+const airborne = rabbit.pose(1.42);
+const landing = rabbit.pose(1.82);
+assert(airborne.dy < -100 && airborne.dx > takeoff.dx);
+assert(landing.scaleY > takeoff.scaleY && landing.dx > airborne.dx);
+const apple = motionFor('apple-clean')[0];
+assert.deepEqual([0,.9,1.62,2.5,4.4].map(time => apple.cut(time).length), [0,1,2,3,0]);
+assert.equal(transformSticker(apple, {x:761,y:461}, 2.5).hidden, true);
+assert.equal(transformSticker(apple, {x:761,y:461}, 4.4).hidden, false);
 const halloween = motionFor('halloween-photo-v4-clean');
 assert.equal(motionPartAt('halloween-photo-v4-clean', halloween, {x:710,y:710}), -1);
 assert.equal(motionPartAt('halloween-photo-v4-clean', halloween, {x:699,y:592}), 1);

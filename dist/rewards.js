@@ -192,8 +192,10 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     playback.title = label;
   }
 
-  function poseSticker(element, {x, y, angle = 0}) {
-    element.setAttribute('transform', `translate(${x} ${y}) rotate(${angle}) scale(${STICKER_SIZE / 64}) translate(-32 -32)`);
+  function poseSticker(element, {x, y, angle = 0, scaleX = 1, scaleY = 1, hidden = false}) {
+    const ratio = STICKER_SIZE / 64;
+    element.style.visibility = hidden ? 'hidden' : '';
+    element.setAttribute('transform', `translate(${x} ${y}) rotate(${angle}) scale(${scaleX * ratio} ${scaleY * ratio}) translate(-32 -32)`);
   }
 
   function finishFlight() {
