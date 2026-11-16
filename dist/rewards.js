@@ -3,8 +3,9 @@ import {createPaintProgress, REWARD_THRESHOLD} from './reward-progress.js';
 import {createMotionScene, drawMotionScene, motionFor, motionPartAt, transformSticker} from './reward-motion.js';
 import {placedStickerArt, stickerArt, stickerById, stickerIcon, stickers, STICKER_SIZE, SVG_NS} from './reward-stickers.js';
 
-const MAX_STICKERS = 100;
+const MAX_PLACED = 100;
 const radius = STICKER_SIZE / 2;
+const clamp = (n, low, high) => Math.max(low, Math.min(n, high));
 
 function isSticker(sticker) {
   return sticker && stickerById.has(sticker.id) &&
@@ -14,13 +15,24 @@ function isSticker(sticker) {
 
 function readReward(state) {
   const saved = state.reward;
+  const completed = saved?.completed === true;
+  const canReadPlacements = typeof saved?.completed === 'boolean' || saved?.earned === true && saved?.opened === true;
   return {
-    earned: saved?.earned === true,
-    opened: saved?.earned === true && saved?.opened === true,
-    stickers: saved?.earned === true && saved?.opened === true && Array.isArray(saved.stickers)
-      ? saved.stickers.filter(isSticker).slice(0, MAX_STICKERS).map(({id, x, y}) => ({id, x, y}))
+    completed,
+    stickers: canReadPlacements && Array.isArray(saved.stickers)
+      ? saved.stickers.filter(isSticker).slice(0, MAX_PLACED).map(({id, x, y}) => ({id, x, y}))
       : []
   };
+}
+
+export function rewardCollection(state) {
+  const saved = Array.isArray(state.rewardCollection) ? state.rewardCollection.filter(id => stickerById.has(id)) : [];
+  return [...new Set([...saved, ...readReward(state).stickers.map(sticker => sticker.id)])];
+}
+
+export function chooseReward(collected, random = Math.random) {
+  const available = stickers.map(([id]) => id).filter(id => !collected.includes(id));
+  return available[Math.floor(random() * available.length)] ?? null;
 }
 
 export function rewardExportMarkup(state) {
@@ -28,11 +40,12 @@ export function rewardExportMarkup(state) {
   return pieces.length ? `<svg xmlns="${SVG_NS}" viewBox="0 0 1000 900">${pieces.map(placedStickerArt).join('')}</svg>` : '';
 }
 
-function playChestSound() {
-  const Audio = window.AudioContext ?? window.webkitAudioContext;
-  if (!Audio) return;
-  try {
-    const context = new Audio();
+function createChestAudio() {
+  let context;
+  let pending = false;
+  function playWhenReady() {
+    if (!pending || context?.state !== 'running') return;
+    pending = false;
     const start = context.currentTime + .025;
     [523.25, 659.25, 783.99, 1046.50, 1318.51].forEach((frequency, i) => {
       const oscillator = context.createOscillator();
@@ -46,131 +59,213 @@ function playChestSound() {
       oscillator.connect(volume).connect(context.destination);
       oscillator.start(at);
       oscillator.stop(at + .34);
-      if (i === 4) oscillator.onended = () => context.close().catch(() => {});
+      oscillator.onended = () => volume.disconnect();
     });
-    context.resume().catch(() => context.close().catch(() => {}));
-  } catch {
-    // The reward is also announced visually when audio is unavailable.
   }
+  function warm() {
+    const Audio = window.AudioContext ?? window.webkitAudioContext;
+    if (!Audio) return;
+    try {
+      context ??= new Audio();
+      if (context.state !== 'running') context.resume().then(playWhenReady).catch(() => {});
+    } catch {
+      // The on-screen celebration is still available.
+    }
+  }
+  return {
+    warm,
+    play() {
+      pending = true;
+      playWhenReady();
+    },
+    clear() { pending = false; }
+  };
 }
 
-export function createRewards({board, ink, getState, drawArtwork, save}) {
+function stickerGhost(id) {
+  const ghost = document.createElement('div');
+  ghost.className = 'reward-floating-sticker';
+  ghost.setAttribute('aria-hidden', 'true');
+  ghost.innerHTML = stickerIcon(id);
+  document.body.append(ghost);
+  return ghost;
+}
+
+function centerOf(element) {
+  const {left, top, width, height} = element.getBoundingClientRect();
+  return {x: left + width / 2, y: top + height / 2};
+}
+
+function ghostAt({x, y}, scale = 1) {
+  return `translate(${x - 28}px,${y - 28}px) scale(${scale})`;
+}
+
+export function createRewards({board, ink, getState, motionArtwork, canCelebrate, save}) {
   const hud = board.querySelector('#reward-hud');
-  const chest = board.querySelector('#reward-chest');
-  const chestLabel = board.querySelector('#reward-chest-label');
   const progress = board.querySelector('#reward-progress');
-  const preview = board.querySelector('#reward-preview');
-  const previewLabel = board.querySelector('#reward-preview-label');
+  const continueDrawing = board.querySelector('#reward-continue');
+  const celebration = board.querySelector('#reward-celebration');
+  const chest = board.querySelector('#reward-chest');
   const stickerLayer = board.querySelector('#reward-stickers');
-  stickerLayer.removeAttribute('hidden');
   const motionLayer = board.querySelector('#reward-motion');
   const context = motionLayer.getContext('2d');
-  const dialog = document.querySelector('#reward-dialog');
-  const catalog = dialog.querySelector('#reward-catalog');
-  const close = dialog.querySelector('#reward-close');
-  const remove = dialog.querySelector('#reward-remove');
+  const tray = document.querySelector('#reward-tray');
+  const inventory = document.querySelector('#reward-inventory');
   const status = document.querySelector('#reward-status');
-  const measure = createPaintProgress();
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const measure = createPaintProgress();
+  const audio = createChestAudio();
+  stickerLayer.hidden = false;
+  stickerLayer.removeAttribute('hidden');
+  tray.hidden = false;
 
   let state;
   let reward;
+  let collected = [];
   let parts = [];
   let area = ORIGINAL_PAPER;
   let timer = 0;
   let frame = 0;
+  let motionTime = 0;
   let generation = 0;
-  let playing = false;
-  let time = 0;
-  let selected = -1;
-  let drag = null;
-  let resumeOnClose = false;
+  let flyingReward;
+  let drag;
+  let suppressedClick;
   let stickerNodes = [];
 
-  function setPlaying(value) {
-    playing = value;
-    preview.setAttribute('aria-pressed', String(value));
-    previewLabel.textContent = value ? '暫停動畫' : '試看動畫';
+  function persist() {
+    state.reward = reward;
+    state.rewardCollection = collected;
+    save();
   }
 
-  function poseSticker(index, placement) {
-    const node = stickerNodes[index];
-    const anchor = playing ? parts[node.part] : null;
-    const pose = anchor ? transformSticker(anchor, placement, time) : placement;
-    node.element.setAttribute('transform',
-      `translate(${pose.x} ${pose.y}) rotate(${pose.angle ?? 0}) scale(${STICKER_SIZE / 64}) translate(-32 -32)`);
+  function poseSticker(element, {x, y, angle = 0}) {
+    element.setAttribute('transform', `translate(${x} ${y}) rotate(${angle}) scale(${STICKER_SIZE / 64}) translate(-32 -32)`);
+  }
+
+  function finishFlight() {
+    if (!flyingReward) return;
+    const flight = flyingReward;
+    flyingReward = null;
+    clearTimeout(flight.sound);
+    clearTimeout(flight.launch);
+    audio.clear();
+    flight.animation?.cancel();
+    flight.ghost?.remove();
+    delete flight.item.dataset.arriving;
+    flight.item.tabIndex = 0;
+    celebration.hidden = true;
+    status.textContent = `收集到${stickerById.get(flight.id).name}，可以從裝飾品欄拖到畫布。`;
   }
 
   function stop() {
     generation++;
     cancelAnimationFrame(frame);
-    setPlaying(false);
+    board.removeAttribute('data-celebrating');
+    continueDrawing.hidden = true;
     motionLayer.hidden = true;
-    if (reward) reward.stickers.forEach((sticker, i) => poseSticker(i, sticker));
+    stickerNodes.forEach(({element, sticker}) => poseSticker(element, sticker));
+    finishFlight();
   }
 
   async function play() {
-    if (!parts.length) return;
-    stop();
-    setPlaying(true);
+    board.dataset.celebrating = '';
+    continueDrawing.hidden = false;
+    if (!parts.length || reducedMotion.matches) return;
     const ticket = generation;
     try {
       const snapshot = {...state, strokes: state.strokes.slice(), fills: state.fills?.slice()};
-      const source = await drawArtwork(snapshot, ORIGINAL_PAPER, 1000);
+      const art = await motionArtwork(snapshot);
       if (ticket !== generation) return;
-      const scene = createMotionScene(snapshot, source, parts);
-      motionLayer.hidden = false;
+      const scene = createMotionScene(snapshot, art, parts);
+      const anchors = stickerNodes.map(({sticker}) => parts[motionPartAt(state.pattern, parts, sticker)]);
       const started = performance.now();
+      motionLayer.hidden = false;
       function next(now) {
-        time = (now - started) / 1000;
+        motionTime = (now - started) / 1000;
         beginPaper(context, motionLayer, area);
-        drawMotionScene(context, scene, time);
-        reward.stickers.forEach((sticker, i) => poseSticker(i, sticker));
+        drawMotionScene(context, scene, motionTime);
+        stickerNodes.forEach(({element, sticker}, i) => {
+          if (anchors[i]) poseSticker(element, transformSticker(anchors[i], sticker, motionTime));
+        });
         frame = requestAnimationFrame(next);
       }
       next(started);
     } catch {
       if (ticket !== generation) return;
-      stop();
-      status.textContent = '動畫暫時無法播放，請再試一次。';
+      motionLayer.hidden = true;
+      status.textContent = '動畫暫時無法播放，可以繼續作畫。';
     }
   }
 
-  function updateHud(percent) {
-    hud.hidden = percent === null;
-    if (percent === null) return;
-    progress.textContent = `${percent}%`;
-    progress.setAttribute('aria-label', `圖案塗色進度 ${percent}%`);
-    chest.disabled = !reward.earned;
-    chest.dataset.ready = String(reward.earned);
-    chestLabel.textContent = reward.opened ? '裝飾品' : '寶箱';
-    chest.title = reward.earned ? chestLabel.textContent : '圖案塗到 85% 就能開寶箱';
-    chest.setAttribute('aria-label', chest.title);
+  function showChest(id, item) {
+    item.dataset.arriving = '';
+    item.tabIndex = -1;
+    item.scrollIntoView({block: 'nearest', inline: 'nearest'});
+    const flight = {id, item};
+    flyingReward = flight;
+    celebration.hidden = false;
+    flight.sound = setTimeout(audio.play, 295);
+    flight.launch = setTimeout(() => {
+      if (reducedMotion.matches) {
+        finishFlight();
+        return;
+      }
+      const center = centerOf(chest);
+      const start = {x: center.x, y: center.y - chest.getBoundingClientRect().height * .12};
+      const end = centerOf(item);
+      flight.ghost = stickerGhost(id);
+      if (!flight.ghost.animate) {
+        finishFlight();
+        return;
+      }
+      flight.animation = flight.ghost.animate([
+        {transform: ghostAt(start, .55), opacity: 0},
+        {transform: ghostAt({x: start.x, y: start.y - 55}, 1.18), opacity: 1, offset: .32},
+        {transform: ghostAt(end, .57), opacity: 1}
+      ], {duration: 720, easing: 'ease-in-out', fill: 'both'});
+      flight.animation.finished.then(() => {
+        if (flyingReward === flight) finishFlight();
+      }).catch(() => {});
+    }, reducedMotion.matches ? 520 : 565);
+  }
+
+  function award() {
+    reward.completed = true;
+    const id = chooseReward(collected);
+    if (id) collected.push(id);
+    persist();
+    if (id) {
+      const item = makeInventoryItem(id);
+      inventory.append(item);
+      showChest(id, item);
+    }
+    void play();
   }
 
   function sync() {
     clearTimeout(timer);
     const next = getState();
     if (next !== state) {
+      cancelDrag();
       stop();
       state = next;
       reward = readReward(state);
+      collected = rewardCollection(state);
+      if (collected.length) state.rewardCollection = collected;
       parts = motionFor(state.pattern);
-      selected = -1;
-      drag = null;
       renderStickers();
-      updateHud(parts.length ? 0 : null);
+      inventory.replaceChildren(...collected.map(makeInventoryItem));
+      hud.hidden = true;
     }
     timer = setTimeout(() => {
-      if (state !== getState()) return;
+      if (state !== getState() || !canCelebrate()) return;
       const percent = measure(state);
-      if (percent !== null && percent >= REWARD_THRESHOLD && !reward.earned) {
-        reward.earned = true;
-        persist();
-        status.textContent = '寶箱解鎖了！點一下寶箱選裝飾品。';
-        if (!reducedMotion.matches) void play();
-      }
-      updateHud(percent);
+      hud.hidden = percent === null;
+      if (percent === null) return;
+      progress.textContent = `${percent}%`;
+      progress.setAttribute('aria-label', `圖案塗色進度 ${percent}%`);
+      if (percent >= REWARD_THRESHOLD && !reward.completed) award();
     }, 65);
   }
 
@@ -184,163 +279,176 @@ export function createRewards({board, ink, getState, drawArtwork, save}) {
     stickerLayer.setAttribute('viewBox', `${area.x} ${area.y} ${area.width} ${area.height}`);
   }
 
-  function persist() {
-    state.reward = reward;
-    save();
+  function position({x, y}) {
+    return {
+      x: clamp(x, area.x + radius, area.x + area.width - radius),
+      y: clamp(y, area.y + radius, area.y + area.height - radius)
+    };
   }
 
-  function select(index) {
-    selected = index;
-    remove.hidden = selected < 0;
-    stickerNodes.forEach(({element}, i) => element.classList.toggle('selected-sticker', i === selected));
-  }
-
-  function removeSticker(index) {
-    if (!reward.stickers[index]) return;
-    stop();
-    const [sticker] = reward.stickers.splice(index, 1);
-    selected = -1;
-    renderStickers();
-    persist();
-    status.textContent = `${stickerById.get(sticker.id).name}已移除`;
-  }
-
-  function locate(event) {
-    return paperPoint(event.clientX, event.clientY, board.getBoundingClientRect(), area);
-  }
-
-  function moveSticker(index, point) {
-    Object.assign(reward.stickers[index], point);
-    poseSticker(index, reward.stickers[index]);
-  }
-
-  function savePlacement(sticker) {
+  function savePlacement(sticker, point) {
+    Object.assign(sticker, point);
     state.paper = includePoint(state.paper, sticker, radius);
     persist();
   }
 
+  function addSticker(id, point) {
+    if (reward.stickers.length >= MAX_PLACED) {
+      status.textContent = '這張畫的裝飾品滿了，移除一個就能再加。';
+      return;
+    }
+    const sticker = {id};
+    reward.stickers.push(sticker);
+    savePlacement(sticker, point);
+    status.textContent = `${stickerById.get(id).name}已放到畫布上。`;
+    return renderSticker(sticker);
+  }
+
+  function removeSticker(sticker) {
+    reward.stickers.splice(reward.stickers.indexOf(sticker), 1);
+    renderStickers();
+    persist();
+    status.textContent = `${stickerById.get(sticker.id).name}已收回裝飾品欄。`;
+  }
+
+  function startDrag(event, id, node, sticker) {
+    if (drag || event.isPrimary === false || event.pointerType === 'mouse' && event.button !== 0) return;
+    suppressedClick = null;
+    const {clientX: x, clientY: y, pointerId} = event;
+    const rect = board.getBoundingClientRect();
+    const paperAtPointer = paperPoint(x, y, rect, area);
+    const anchor = sticker && !motionLayer.hidden && parts[motionPartAt(state.pattern, parts, sticker)];
+    const displayed = anchor ? transformSticker(anchor, sticker, motionTime) : sticker;
+    drag = {
+      pointerId, id, node, sticker, x, y, moved: false,
+      offset: displayed ? {x: displayed.x - paperAtPointer.x, y: displayed.y - paperAtPointer.y} : {x: 0, y: 0}
+    };
+    if (sticker) event.preventDefault();
+    try { node.setPointerCapture(pointerId); } catch { /* Window listeners also track the pointer. */ }
+  }
+
+  function positionFromEvent(event, rect, offset) {
+    const point = paperPoint(event.clientX, event.clientY, rect, area);
+    return position({x: point.x + offset.x, y: point.y + offset.y});
+  }
+
+  function moveDrag(event) {
+    if (drag?.pointerId !== event.pointerId) return;
+    if (!drag.moved) {
+      if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 4) return;
+      drag.moved = true;
+      stop();
+      if (!drag.sticker) drag.ghost = stickerGhost(drag.id);
+    }
+    event.preventDefault();
+    if (drag.sticker) {
+      poseSticker(drag.node, positionFromEvent(event, board.getBoundingClientRect(), drag.offset));
+    } else {
+      drag.ghost.style.transform = ghostAt({x: event.clientX, y: event.clientY});
+    }
+  }
+
+  function inRect(x, y, {left, top, right, bottom}) {
+    return x >= left && x <= right && y >= top && y <= bottom;
+  }
+
+  function cancelDrag() {
+    if (!drag) return;
+    if (drag.sticker) poseSticker(drag.node, drag.sticker);
+    drag.ghost?.remove();
+    drag = null;
+  }
+
+  function endDrag(event) {
+    if (drag?.pointerId !== event.pointerId) return;
+    const {id, sticker, node, moved, offset} = drag;
+    cancelDrag();
+    if (!moved || event.type !== 'pointerup') return;
+    event.preventDefault();
+    if (!sticker) {
+      suppressedClick = node;
+      setTimeout(() => { if (suppressedClick === node) suppressedClick = null; }, 350);
+    }
+    const rect = board.getBoundingClientRect();
+    if (inRect(event.clientX, event.clientY, rect)) {
+      const point = positionFromEvent(event, rect, offset);
+      if (sticker) {
+        savePlacement(sticker, point);
+        poseSticker(node, sticker);
+      } else {
+        addSticker(id, point);
+      }
+    } else if (sticker && inRect(event.clientX, event.clientY, tray.getBoundingClientRect())) {
+      removeSticker(sticker);
+    }
+  }
+
+  function makeInventoryItem(id) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'reward-item';
+    item.dataset.sticker = id;
+    item.setAttribute('aria-label', `${stickerById.get(id).name}，拖放到畫布`);
+    item.title = stickerById.get(id).name;
+    item.innerHTML = stickerIcon(id);
+    item.addEventListener('pointerdown', event => startDrag(event, id, item));
+    item.onclick = event => {
+      if (event.detail && suppressedClick === item) return;
+      stop();
+      addSticker(id, position({x: area.x + area.width / 2, y: area.y + area.height / 2}))?.focus();
+    };
+    return item;
+  }
+
+  function renderSticker(sticker) {
+    const element = document.createElementNS(SVG_NS, 'g');
+    element.classList.add('placed-sticker');
+    element.innerHTML = `<rect class="sticker-handle" width="64" height="64"/>${stickerArt(sticker.id)}`;
+    element.setAttribute('tabindex', '0');
+    element.setAttribute('role', 'button');
+    element.setAttribute('aria-label', `${stickerById.get(sticker.id).name}，可拖曳移動`);
+    stickerLayer.append(element);
+    stickerNodes.push({element, sticker});
+    poseSticker(element, sticker);
+    element.addEventListener('pointerdown', event => startDrag(event, sticker.id, element, sticker));
+    element.addEventListener('keydown', event => {
+      const delta = {ArrowLeft: [-1,0], ArrowRight: [1,0], ArrowUp: [0,-1], ArrowDown: [0,1]}[event.key];
+      if (event.key !== 'Delete' && event.key !== 'Backspace' && !delta) return;
+      event.preventDefault();
+      stop();
+      if (delta) {
+        savePlacement(sticker, position({x: sticker.x + delta[0] * 12, y: sticker.y + delta[1] * 12}));
+        poseSticker(element, sticker);
+      } else {
+        removeSticker(sticker);
+        inventory.querySelector(`[data-sticker="${sticker.id}"]`)?.focus();
+      }
+    });
+    return element;
+  }
+
   function renderStickers() {
     stickerLayer.replaceChildren();
-    stickerNodes = reward.stickers.map((sticker, index) => {
-      const element = document.createElementNS(SVG_NS, 'g');
-      element.classList.add('placed-sticker');
-      element.innerHTML = `<rect class="sticker-handle" x="0" y="0" width="64" height="64" rx="11"/>${stickerArt(sticker.id)}`;
-      element.setAttribute('tabindex', '0');
-      element.setAttribute('role', 'button');
-      element.setAttribute('aria-label', stickerById.get(sticker.id).name + '，可拖曳移動');
-      stickerLayer.append(element);
-      return {element, part: motionPartAt(state.pattern, parts, sticker)};
-    });
-    stickerNodes.forEach(({element}, index) => {
-      const sticker = reward.stickers[index];
-      poseSticker(index, sticker);
-      element.addEventListener('pointerdown', event => {
-        if (drag || !event.isPrimary || event.button !== 0) return;
-        event.preventDefault();
-        const resume = playing;
-        const part = playing && parts[stickerNodes[index].part];
-        const position = part ? transformSticker(part, sticker, time) : sticker;
-        const here = locate(event);
-        stop();
-        select(index);
-        element.focus({preventScroll: true});
-        element.setPointerCapture(event.pointerId);
-        drag = {
-          index, pointer: event.pointerId, x: position.x - here.x, y: position.y - here.y,
-          startX: event.clientX, startY: event.clientY, original: {x: sticker.x, y: sticker.y}, moved: false, resume
-        };
-      });
-      element.addEventListener('pointermove', event => {
-        if (drag?.pointer !== event.pointerId || drag.index !== index) return;
-        if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 3) return;
-        drag.moved = true;
-        const point = locate(event);
-        moveSticker(index, {
-          x: Math.max(area.x + radius, Math.min(area.x + area.width - radius, point.x + drag.x)),
-          y: Math.max(area.y + radius, Math.min(area.y + area.height - radius, point.y + drag.y))
-        });
-      });
-      for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-        element.addEventListener(eventName, event => {
-          if (drag?.pointer !== event.pointerId || drag.index !== index) return;
-          const finished = drag;
-          drag = null;
-          if (eventName !== 'pointerup') moveSticker(index, finished.original);
-          stickerNodes[index].part = motionPartAt(state.pattern, parts, sticker);
-          if (eventName === 'pointerup' && finished.moved) savePlacement(sticker);
-          if (finished.resume && !document.hidden) void play();
-        });
-      }
-      element.addEventListener('keydown', event => {
-        if (event.key === 'Delete' || event.key === 'Backspace') {
-          event.preventDefault();
-          removeSticker(index);
-          chest.focus();
-          return;
-        }
-        const delta = {ArrowLeft: [-1,0], ArrowRight: [1,0], ArrowUp: [0,-1], ArrowDown: [0,1]}[event.key];
-        if (!delta) return;
-        event.preventDefault();
-        stop();
-        select(index);
-        moveSticker(index, {
-          x: Math.max(area.x + radius, Math.min(area.x + area.width - radius, sticker.x + delta[0] * 12)),
-          y: Math.max(area.y + radius, Math.min(area.y + area.height - radius, sticker.y + delta[1] * 12))
-        });
-        stickerNodes[index].part = motionPartAt(state.pattern, parts, sticker);
-        savePlacement(sticker);
-      });
-    });
-    select(selected);
+    stickerNodes = [];
+    reward.stickers.forEach(renderSticker);
   }
 
-  for (const [id, name] of stickers) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'reward-option';
-    button.innerHTML = `${stickerIcon(id)}<span>${name}</span>`;
-    button.onclick = () => {
-      if (reward.stickers.length >= MAX_STICKERS) {
-        status.textContent = '這張畫的裝飾品滿了，移除一個就能再加。';
-        return;
-      }
-      const offset = (reward.stickers.length % 5) * 24;
-      const sticker = {id, x: area.x + area.width / 2 + offset, y: area.y + area.height / 2 + offset};
-      reward.stickers.push(sticker);
-      selected = reward.stickers.length - 1;
-      renderStickers();
-      savePlacement(sticker);
-      dialog.close();
-      stickerNodes[selected].element.focus({preventScroll: true});
-      status.textContent = `${name}已放在畫布中央，可以拖動位置。`;
-    };
-    catalog.append(button);
-  }
-
-  chest.onclick = () => {
-    if (!reward.earned) return;
-    resumeOnClose = playing;
+  continueDrawing.onclick = () => {
     stop();
-    if (!reward.opened) {
-      reward.opened = true;
-      persist();
-      playChestSound();
-      chestLabel.textContent = '裝飾品';
-      chest.setAttribute('aria-label', '裝飾品');
-      chest.title = '裝飾品';
-    }
-    dialog.showModal();
+    status.textContent = '已回到原本的畫，現在可以繼續作畫。';
   };
-  close.onclick = () => dialog.close();
-  dialog.addEventListener('close', () => {
-    if (resumeOnClose && !document.hidden) void play();
-    resumeOnClose = false;
+  ink.addEventListener('pointerdown', audio.warm);
+  board.addEventListener('pointerup', audio.warm);
+  window.addEventListener('pointermove', moveDrag, {capture: true, passive: false});
+  window.addEventListener('pointerup', endDrag, true);
+  window.addEventListener('pointercancel', endDrag, true);
+  window.addEventListener('blur', cancelDrag);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      cancelDrag();
+      stop();
+    }
   });
-  remove.onclick = () => removeSticker(selected);
-  preview.onclick = () => playing ? stop() : void play();
-  ink.addEventListener('pointerdown', stop);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
-  window.addEventListener('pagehide', stop);
 
   return {sync, resize, stop};
 }

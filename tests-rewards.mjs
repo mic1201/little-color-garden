@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import {W} from './dist/engine.js';
+import {H, W} from './dist/engine.js';
 import {PAPER_REGION} from './dist/fills.js';
 import {availablePatterns} from './dist/patterns.js';
 import {countPaintedArea, createPaintProgress, REWARD_THRESHOLD} from './dist/reward-progress.js';
-import {motionFor, motionPartAt, transformSticker} from './dist/reward-motion.js';
-import {rewardExportMarkup} from './dist/rewards.js';
+import {inkMotionOwners, motionFor, motionGeometry, motionPartAt, transformSticker} from './dist/reward-motion.js';
+import {chooseReward, rewardCollection, rewardExportMarkup} from './dist/rewards.js';
 import {stickers} from './dist/reward-stickers.js';
 
 const regions = [{id: 'large', spans: [[10, 10, 180]]}, {id: 'small', spans: [[11, 10, 40]]}];
@@ -35,6 +35,8 @@ for (const {id} of visible) {
   }
   const parts = motionFor(id);
   assert(parts.length, id);
+  const owners = new Set(motionGeometry(id, parts));
+  parts.forEach((_, index) => assert(owners.has(index + 1), id));
   for (const part of parts) {
     const [left, top, right, bottom] = part.rect;
     const sticker = {x:(left + right)/2, y:(top + bottom)/2};
@@ -53,7 +55,20 @@ assert(head.x - 642 > 40);
 assert(foot.x - 377 < 15);
 const halloween = motionFor('halloween-photo-v4-clean');
 assert.equal(motionPartAt('halloween-photo-v4-clean', halloween, {x:710,y:710}), -1);
-assert.equal(motionPartAt('halloween-photo-v4-clean', halloween, {x:699,y:592}), 2);
+assert.equal(motionPartAt('halloween-photo-v4-clean', halloween, {x:699,y:592}), 1);
+const whale = motionFor('whale-clean');
+const whaleOwners = motionGeometry('whale-clean', whale);
+assert.equal(motionPartAt('whale-clean', whale, {x:510,y:291}), 0, 'the back cannot split at the old clip');
+assert.equal(motionPartAt('whale-clean', whale, {x:175,y:329}), 1, 'the left bubble moves independently');
+assert.equal(motionPartAt('whale-clean', whale, {x:211,y:435}), -1);
+
+const brushInk = new Uint8ClampedArray(W * H * 4);
+for (let x = 200; x <= 380; x++) brushInk[(450 * W + x) * 4 + 3] = 128;
+for (let x = 300; x <= 350; x++) brushInk[(460 * W + x) * 4 + 3] = 128;
+const movingInk = inkMotionOwners(brushInk, whaleOwners);
+assert.equal(whaleOwners[450 * W + 350], 1);
+assert.equal(movingInk[450 * W + 350], 0, 'an ink line crossing the foreground stays entirely still');
+assert.equal(movingInk[460 * W + 350], 1, 'ink wholly on the whale moves with it');
 
 assert.equal(stickers.length, 30);
 assert.equal(new Set(stickers.map(([id]) => id)).size, 30);
@@ -62,4 +77,10 @@ const markup = rewardExportMarkup({reward:saved});
 assert.match(markup, /translate\(76 86\)/);
 assert(!markup.includes('missing'));
 assert.equal(rewardExportMarkup({reward:{...saved,opened:false}}), '');
-console.log('PASS rewards: exclude background, weight actual painted area, 85% threshold, 24 motion scenes, and 30 exportable stickers');
+assert.match(rewardExportMarkup({reward:{completed:false,stickers:saved.stickers}}), /translate\(76 86\)/);
+assert.deepEqual(rewardCollection({reward:saved,rewardCollection:['paw','paw','missing']}), ['paw','crown']);
+const picked = [];
+for (let i = 0; i < 30; i++) picked.push(chooseReward(picked, () => .79));
+assert.equal(new Set(picked).size, 30);
+assert.equal(chooseReward(picked), null);
+console.log('PASS rewards: 85% area, whole outlines and crossing ink, 24 moving scenes, and 30 unique collectible stickers');

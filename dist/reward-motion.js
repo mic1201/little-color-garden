@@ -12,11 +12,6 @@ const dance = (rect, period, distance, height, angle, pivot) => wave(rect, t => 
   angle: oscillate(t, period) * angle,
   pivot
 }));
-const flutter = (rect, period, amplitude, start, end) => ({
-  rect, axis: 'x',
-  offset: (x, t) => ({y: Math.max(0, Math.min(1, (x - start) / (end - start))) * amplitude * oscillate(t - (x - start) / 180, period)})
-});
-
 const scenes = {
   'cat-clean': [dance([225,140,878,810], 2.6, 14, 29, 2.5, [500,760])],
   'butterfly-clean': [{
@@ -76,11 +71,7 @@ const scenes = {
     offset: (y, t) => ({x: 21 * Math.sin(Math.PI * Math.max(0, (y - 490) / 355) / 2) * oscillate(t, 2.9)}),
     pose: t => ({angle: 3.5 * oscillate(t, 2.9), pivot: [500,745]})
   }],
-  'princess-castle-clean': [
-    flutter([490,49,591,122], 1.5, 13, 501, 580),
-    flutter([281,150,368,220], 1.7, 11, 293, 357),
-    flutter([697,150,783,220], 1.4, 12, 709, 773)
-  ],
+  'princess-castle-clean': [dance([180,45,827,797], 4.8, 0, 6, 1.6, [500,780])],
   'bus-clean': [wave([128,255,884,772], t => ({
     dx: 48 * oscillate(t, 4.3), dy: -5 * bounce(t, .95), angle: .9 * oscillate(t, .95), pivot: [500,735]
   }))],
@@ -99,16 +90,11 @@ const scenes = {
     wave([719,549,917,650], t => ({dx: -22 * oscillate(t, 3.2), dy: 12 * oscillate(t, 3.6)}))
   ],
   'dino-picnic-clean': [dance([287,287,767,700], 2.8, 19, 27, -4, [519,645])],
-  'castle-garden-clean': [
-    flutter([490,104,580,174], 1.6, 11, 501, 571),
-    flutter([275,172,359,238], 1.8, 12, 288, 347),
-    flutter([702,172,785,238], 1.5, 12, 714, 773)
-  ],
+  'castle-garden-clean': [dance([185,104,815,686], 4.2, 0, 7, -1.5, [500,670])],
   'halloween-photo-v4-clean': [
     wave([720,288,891,461], t => ({dx: 16 * oscillate(t, 3.7), dy: -37 * bounce(t, 3.7), angle: 6 * oscillate(t, 3.7), pivot: [792,380]})),
-    dance([219,458,467,842], 2.1, 2, 24, 2.5, [340,810]),
-    cutout(dance([468,443,719,842], 2.7, 2, 24, -2.5, [580,810]),
-      [[468,443],[719,443],[719,626],[685,651],[685,842],[468,842]])
+    cutout(dance([219,443,719,842], 2.7, 5, 24, -2.5, [466,810]),
+      [[219,443],[719,443],[719,626],[685,651],[685,842],[219,842]])
   ]
 };
 
@@ -117,15 +103,13 @@ export function motionFor(pattern) {
   return scenes[pattern] ?? [dance([0,0,W,H], 3.2, 14, 14, 2, [500,620])];
 }
 
-export function motionPartAt(pattern, parts, {x, y}) {
-  const [top, rows] = paperMasks[pattern] ?? [0, []];
-  const row = rows[Math.floor(y) - top] ?? [];
-  if (!row.some((left, i) => i % 2 === 0 && x >= left && x < row[i + 1])) return -1;
-  return parts.findIndex(({rect: [l, t, r, b], polygon}) =>
-    x >= l && x < r && y >= t && y < b && (!polygon || insidePolygon(polygon, x, y)));
-}
+const PIXELS = W * H;
+const NEIGHBOR_ROWS = [-W, 0, W];
+let lastGeometry;
 
-function insidePolygon(polygon, x, y) {
+function insidePart({rect: [left, top, right, bottom], polygon}, x, y) {
+  if (x < left || x >= right || y < top || y >= bottom) return false;
+  if (!polygon) return true;
   let inside = false;
   for (let i = 0; i < polygon.length; i++) {
     const [ax, ay] = polygon[i];
@@ -135,6 +119,95 @@ function insidePolygon(polygon, x, y) {
   return inside;
 }
 
+// Visit whole painted components. Include diagonal neighbors so thin lines
+// and antialiased edges cannot be split between animation layers.
+function visitComponents(mask, visit) {
+  const queue = new Int32Array(PIXELS);
+  for (let start = 0; start < PIXELS; start++) {
+    if (!mask[start]) continue;
+    let end = 1;
+    queue[0] = start;
+    mask[start] = 0;
+    for (let i = 0; i < end; i++) {
+      const pixel = queue[i];
+      const x = pixel % W;
+      const first = x === 0 ? 0 : -1;
+      const last = x === W - 1 ? 0 : 1;
+      for (const d of NEIGHBOR_ROWS) {
+        for (let dx = first; dx <= last; dx++) {
+          const neighbor = pixel + d + dx;
+          if (!mask[neighbor]) continue;
+          mask[neighbor] = 0;
+          queue[end++] = neighbor;
+        }
+      }
+    }
+    visit(queue, end);
+  }
+}
+
+export function motionGeometry(pattern, parts) {
+  if (lastGeometry?.pattern === pattern && lastGeometry.parts === parts) return lastGeometry.owners;
+  const [top, rows] = paperMasks[pattern] ?? [0, []];
+  const mask = new Uint8Array(PIXELS);
+  for (const [i, row] of rows.entries()) {
+    const start = (top + i) * W;
+    for (let j = 0; j < row.length; j += 2) mask.fill(1, start + row[j], start + row[j + 1]);
+  }
+
+  const owners = new Uint8Array(PIXELS);
+  if (!parts.length) return owners;
+  const coverage = new Uint32Array(parts.length);
+  visitComponents(mask, (pixels, length) => {
+    coverage.fill(0);
+    for (let i = 0; i < length; i++) {
+      const pixel = pixels[i];
+      const x = pixel % W, y = Math.floor(pixel / W);
+      const part = parts.findIndex(candidate => insidePart(candidate, x, y));
+      if (part !== -1) coverage[part]++;
+    }
+    const winner = coverage.indexOf(Math.max(...coverage));
+    const owner = coverage[winner] * 2 > length ? winner + 1 : 255;
+    for (let i = 0; i < length; i++) owners[pixels[i]] = owner;
+  });
+  // 255 marks a static component. Padding can take empty edge pixels only.
+  const padded = owners.slice();
+  for (let i = 0; i < PIXELS; i++) {
+    const owner = owners[i];
+    if (!owner || owner === 255) continue;
+    const x = i % W;
+    for (let dy = -W; dy <= W; dy += W) {
+      const from = x ? -1 : 0;
+      const to = x < W - 1 ? 1 : 0;
+      for (let dx = from; dx <= to; dx++) {
+        const index = i + dx + dy;
+        if (padded[index] === 0) padded[index] = owner;
+      }
+    }
+  }
+  for (let i = 0; i < PIXELS; i++) if (padded[i] === 255) padded[i] = 0;
+  lastGeometry = {pattern, parts, owners: padded};
+  return padded;
+}
+
+export function motionPartAt(pattern, parts, {x, y}) {
+  if (x < 0 || x >= W || y < 0 || y >= H || !parts.length) return -1;
+  return motionGeometry(pattern, parts)[Math.floor(y) * W + Math.floor(x)] - 1;
+}
+
+export function inkMotionOwners(rgba, geometry) {
+  const mask = new Uint8Array(PIXELS);
+  for (let i = 0; i < PIXELS; i++) mask[i] = rgba[i * 4 + 3] !== 0;
+  const owners = new Uint8Array(PIXELS);
+  visitComponents(mask, (pixels, length) => {
+    const owner = geometry[pixels[0]];
+    if (!owner) return;
+    for (let i = 1; i < length; i++) if (geometry[pixels[i]] !== owner) return;
+    for (let i = 0; i < length; i++) owners[pixels[i]] = owner;
+  });
+  return owners;
+}
+
 function surface() {
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -142,51 +215,90 @@ function surface() {
   return canvas.getContext('2d');
 }
 
-function maskPath(pattern) {
-  const path = new Path2D();
-  const [top, rows] = paperMasks[pattern];
-  // Include the antialiased edge beyond the solid mask.
-  for (const [i, row] of rows.entries()) {
-    for (let j = 0; j < row.length; j += 2) {
-      path.rect(row[j] - 1, top + i - 1, row[j + 1] - row[j] + 2, 3);
+function rasterPaths(owners, count) {
+  const all = new Path2D();
+  const layers = Array.from({length: count}, () => null);
+  for (let y = 0; y < H; y++) {
+    const row = y * W;
+    for (let x = 0; x < W;) {
+      const owner = owners[row + x];
+      if (!owner) {
+        x++;
+        continue;
+      }
+      let end = x + 1;
+      while (end < W && owners[row + end] === owner) end++;
+      all.rect(x, y, end - x, 1);
+      const layer = layers[owner - 1] ??= {path: new Path2D(), bounds: [W, H, 0, 0]};
+      layer.path.rect(x, y, end - x, 1);
+      const bounds = layer.bounds;
+      bounds[0] = Math.min(bounds[0], x);
+      bounds[1] = Math.min(bounds[1], y);
+      bounds[2] = Math.max(bounds[2], end);
+      bounds[3] = y + 1;
+      x = end;
     }
   }
-  return path;
+  return {all, layers};
 }
 
-export function createMotionScene(state, source, parts) {
-  const base = surface();
-  base.drawImage(source, 0, 0);
-  const silhouette = maskPath(state.pattern);
-  const layers = parts.map(part => {
-    const [x, y, right, bottom] = part.rect;
-    const context = surface();
-    context.beginPath();
-    context.rect(x, y, right - x, bottom - y);
-    context.clip();
-    if (part.polygon) {
-      context.beginPath();
-      context.moveTo(...part.polygon[0]);
-      for (const point of part.polygon.slice(1)) context.lineTo(...point);
-      context.closePath();
-      context.clip();
-    }
-    context.clip(silhouette);
-    context.drawImage(source, 0, 0);
-    base.globalCompositeOperation = 'destination-out';
-    base.drawImage(context.canvas, 0, 0);
-    return {...part, image: context.canvas, warped: part.axis ? surface() : null};
-  });
+function removePixels(context, path) {
+  context.save();
+  context.globalCompositeOperation = 'destination-out';
+  context.fill(path);
+  context.restore();
+}
+
+function copy(image, mask) {
+  const context = surface();
+  if (mask) context.clip(mask);
+  context.drawImage(image, 0, 0);
+  return context;
+}
+
+function addBackdrop(context, state) {
   const fill = state.fills?.find(fill => fill.region === PAPER_REGION);
-  base.globalCompositeOperation = 'destination-over';
-  base.fillStyle = fill?.color ?? backgroundColor(state);
+  context.globalCompositeOperation = 'destination-over';
+  context.fillStyle = fill?.color ?? backgroundColor(state);
   if (fill?.rainbow) {
-    const gradient = base.createLinearGradient(0, 0, W, H);
+    const gradient = context.createLinearGradient(0, 0, W, H);
     RAINBOW_COLORS.forEach((color, i) => gradient.addColorStop(i / (RAINBOW_COLORS.length - 1), color));
-    base.fillStyle = gradient;
+    context.fillStyle = gradient;
   }
-  base.fillRect(0, 0, W, H);
-  return {base: base.canvas, layers};
+  context.fillRect(0, 0, W, H);
+  context.globalCompositeOperation = 'source-over';
+}
+
+export function createMotionScene(state, art, parts) {
+  const geometry = motionGeometry(state.pattern, parts);
+  const masks = rasterPaths(geometry, parts.length);
+  const hasInk = state.strokes.some(stroke => stroke.tool !== 'eraser');
+  const inkMasks = hasInk ? rasterPaths(inkMotionOwners(art.ink.getContext('2d').getImageData(0, 0, W, H).data, geometry), parts.length) : null;
+
+  const base = copy(art.paper);
+  removePixels(base, masks.all);
+  addBackdrop(base, state);
+  const stillOutline = copy(art.outline);
+  removePixels(stillOutline, masks.all);
+  const stillInk = hasInk ? copy(art.ink) : null;
+  if (inkMasks) removePixels(stillInk, inkMasks.all);
+
+  const layers = [];
+  for (const [i, mask] of masks.layers.entries()) {
+    if (!mask) continue;
+    const colors = copy(art.paper, mask.path);
+    const inkMask = inkMasks?.layers[i];
+    if (inkMask) {
+      colors.clip(inkMask.path);
+      colors.drawImage(art.ink, 0, 0);
+    }
+    layers.push({
+      ...parts[i], bounds: mask.bounds, colors: colors.canvas,
+      outline: copy(art.outline, mask.path).canvas,
+      warped: parts[i].axis ? surface() : null
+    });
+  }
+  return {base: base.canvas, stillInk: stillInk?.canvas, outline: stillOutline.canvas, layers};
 }
 
 const angleRadians = angle => (angle ?? 0) * Math.PI / 180;
@@ -207,49 +319,55 @@ export function transformSticker(part, sticker, time) {
   };
 }
 
-function drawWarp(context, part, time) {
-  const [left, top, right, bottom] = part.rect;
+function drawWarp(context, part, image, time) {
+  const [left, top, right, bottom] = part.bounds;
   const vertical = part.axis === 'y';
   const start = vertical ? top : left;
   const end = vertical ? bottom : right;
-  // Strips share a mapped edge. Interpolate displacement along each strip.
+  // Rasterize shared edges at the same integer coordinate so neighboring
+  // strips meet even when the shape narrows or moves by a fraction of a pixel.
   for (let a = start; a < end; a += 12) {
     const b = Math.min(a + 12, end);
     const step = b - a;
     const from = part.offset(a, time);
     const to = part.offset(b, time);
-    const x = from.x ?? 0;
-    const y = from.y ?? 0;
-    const changeX = ((to.x ?? 0) - x) / step;
-    const changeY = ((to.y ?? 0) - y) / step;
     context.save();
     if (vertical) {
-      context.translate(0, a);
-      context.transform(1, 0, changeX, 1 + changeY, x, y);
-      context.drawImage(part.image, left, a, right - left, step, left, 0, right - left, step);
+      const top = Math.round(a + (from.y ?? 0));
+      const bottom = Math.round(b + (to.y ?? 0));
+      const x = from.x ?? 0;
+      context.transform(1, 0, ((to.x ?? 0) - x) / step, (bottom - top) / step, x, top);
+      context.drawImage(image, left, a, right - left, step, left, 0, right - left, step);
     } else {
-      context.translate(a, 0);
-      context.transform(1 + changeX, changeY, 0, 1, x, y);
-      context.drawImage(part.image, a, top, step, bottom - top, 0, top, step, bottom - top);
+      const left = Math.round(a + (from.x ?? 0));
+      const right = Math.round(b + (to.x ?? 0));
+      const y = from.y ?? 0;
+      context.transform((right - left) / step, ((to.y ?? 0) - y) / step, 0, 1, left, y);
+      context.drawImage(image, a, top, step, bottom - top, 0, top, step, bottom - top);
     }
     context.restore();
   }
 }
 
+function drawPart(context, part, image, time) {
+  const {dx = 0, dy = 0, angle = 0, pivot = [0, 0]} = part.pose?.(time) ?? zeroPose;
+  const [x, y] = pivot;
+  if (part.warped) {
+    part.warped.clearRect(0, 0, W, H);
+    drawWarp(part.warped, part, image, time);
+  }
+  context.save();
+  context.translate(dx + x, dy + y);
+  context.rotate(angleRadians(angle));
+  context.translate(-x, -y);
+  context.drawImage(part.warped?.canvas ?? image, 0, 0);
+  context.restore();
+}
+
 export function drawMotionScene(context, scene, time) {
   context.drawImage(scene.base, 0, 0);
-  for (const part of scene.layers) {
-    const {dx = 0, dy = 0, angle = 0, pivot = [0, 0]} = part.pose?.(time) ?? zeroPose;
-    const [x, y] = pivot;
-    context.save();
-    context.translate(dx + x, dy + y);
-    context.rotate(angleRadians(angle));
-    context.translate(-x, -y);
-    if (part.warped) {
-      part.warped.clearRect(0, 0, W, H);
-      drawWarp(part.warped, part, time);
-    }
-    context.drawImage(part.warped?.canvas ?? part.image, 0, 0);
-    context.restore();
-  }
+  for (const part of scene.layers) drawPart(context, part, part.colors, time);
+  if (scene.stillInk) context.drawImage(scene.stillInk, 0, 0);
+  context.drawImage(scene.outline, 0, 0);
+  for (const part of scene.layers) drawPart(context, part, part.outline, time);
 }

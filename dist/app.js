@@ -36,7 +36,7 @@ $('#storage-warning').onclick=()=>{finish();$('#parent-dialog').showModal()};
 function save(){clearTimeout(saving);try{localStorage.setItem(KEY,JSON.stringify(state));saveFailed=false;$('#storage-warning').hidden=true;$('#save-status').textContent='✓ 已暫存在這台裝置'}catch{saveFailed=true;storageWarning('暫存空間不足，請大人儲存圖片。')}}
 function changed(){dirty=true;render();rewards?.stop();rewards?.sync();clearTimeout(saving);saving=setTimeout(save,300)}
 function finish(){if(pointer===null)return;const id=pointer;pointer=null;if(canvas.hasPointerCapture(id))canvas.releasePointerCapture(id);if(active?.points.length){state.strokes.push(active);history.push({kind:'stroke',stroke:active});redo=[]}active=null;changed()}
-function setPattern(id){finish();state={version:1,pattern:id,background:backgroundColor(state),fillMode:state.fillMode===true,strokes:[]};history=[];redo=[];$('#outline').innerHTML=outlineMarkup(id);syncFillMode();requestAnimationFrame(fit);const p=patterns.find(p=>p.id===id);$('#picture-title').textContent=p.icon+' '+p.name;document.querySelectorAll('.pattern').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===id)));filterPatterns();changed()}
+function setPattern(id){finish();state={version:1,pattern:id,background:backgroundColor(state),fillMode:state.fillMode===true,strokes:[],rewardCollection:state.rewardCollection};history=[];redo=[];$('#outline').innerHTML=outlineMarkup(id);syncFillMode();requestAnimationFrame(fit);const p=patterns.find(p=>p.id===id);$('#picture-title').textContent=p.icon+' '+p.name;document.querySelectorAll('.pattern').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===id)));filterPatterns();changed()}
 function ask(title,message,fn,target=state.pattern){finish();const preview=$('#confirm-preview');preview.replaceChildren();const before=document.createElement('div');before.className='confirm-sheet';before.style.background=backgroundColor(state);if(typeof canvas.toDataURL==='function'){const image=document.createElement('img');image.src=canvas.toDataURL('image/png');image.alt='';before.append(image)}const lines=document.createElement('div');lines.innerHTML=paperMarkup(outlineMarkup(state.pattern),view);before.style.aspectRatio=String(view.width/view.height);before.append(lines);const arrow=document.createElement('span');arrow.textContent='→';const after=document.createElement('div');after.className='confirm-sheet';after.style.background=backgroundColor(state);after.innerHTML=outlineMarkup(target);preview.append(before,arrow,after);confirmAction=fn;$('#confirm-title').textContent=title;$('#confirm-message').textContent=message;$('#confirm-dialog').showModal()}
 const brushPicker = $('#brush-picker');
 const stampOptions = $('#stamp-options');
@@ -111,13 +111,15 @@ if (nativeApp) {
   $('#export-help').textContent = '用系統分享選單儲存或傳送圖片。直向、橫向都可以畫。';
 }
 
-async function drawArtwork(snapshot, area, maxSize, stickerMarkup='') {
-  const dimensions = rasterSize(area, maxSize);
-  const output = document.createElement('canvas');
-  const ink = document.createElement('canvas');
-  output.width = ink.width = dimensions.width;
-  output.height = ink.height = dimensions.height;
-  const context = output.getContext('2d');
+function artworkCanvas({width, height}) {
+  const layer = document.createElement('canvas');
+  layer.width = width;
+  layer.height = height;
+  return layer;
+}
+
+function paintArtworkPaper(context, snapshot, area) {
+  const output = context.canvas;
   context.fillStyle = backgroundColor(snapshot);
   context.fillRect(0, 0, output.width, output.height);
   context.save();
@@ -125,12 +127,31 @@ async function drawArtwork(snapshot, area, maxSize, stickerMarkup='') {
     -area.x * output.width / area.width, -area.y * output.height / area.height);
   drawFills(context, snapshot, area);
   context.restore();
+}
+
+async function drawArtwork(snapshot, area, maxSize, stickerMarkup='') {
+  const dimensions = rasterSize(area, maxSize);
+  const output = artworkCanvas(dimensions);
+  const ink = artworkCanvas(dimensions);
+  const context = output.getContext('2d');
+  paintArtworkPaper(context, snapshot, area);
   paintInk(ink.getContext('2d'), ink, area, false, snapshot.strokes);
   context.drawImage(ink, 0, 0);
 
   await drawSvg(context, exportMarkup(snapshot.pattern), area);
   if (stickerMarkup) await drawSvg(context, stickerMarkup, area);
   return output;
+}
+
+async function motionArtwork(snapshot) {
+  const area = ORIGINAL_PAPER;
+  const paper = artworkCanvas(area);
+  const ink = artworkCanvas(area);
+  const outline = artworkCanvas(area);
+  paintArtworkPaper(paper.getContext('2d'), snapshot, area);
+  paintInk(ink.getContext('2d', {willReadFrequently: true}), ink, area, false, snapshot.strokes);
+  await drawSvg(outline.getContext('2d'), exportMarkup(snapshot.pattern), area);
+  return {paper, ink, outline};
 }
 
 async function drawSvg(context, markup, area) {
@@ -409,7 +430,7 @@ function restoreFill(region,fill){state.fills=(state.fills||[]).filter(f=>f.regi
 function fillAt(point){const region=fillTarget(state.pattern,point.x,point.y);if(!region)return;const before=(state.fills||[]).find(f=>f.region===region)||null;const after={region,color,rainbow};if(before?.color===color&&before.rainbow===rainbow)return;restoreFill(region,after);history.push({kind:'fill',region,before,after});redo=[];changed()}
 
 if (!nativeApp && document.createElementNS) {
-  rewards = createRewards({board, ink: canvas, getState: () => state, drawArtwork, save});
+  rewards = createRewards({board, ink: canvas, getState: () => state, canCelebrate: () => pointer === null, motionArtwork, save});
   rewards.resize(view);
   rewards.sync();
 }
