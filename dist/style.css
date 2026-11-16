@@ -348,3 +348,102 @@ p { line-height: 1.62; }
   white-space: nowrap !important;
   border: 0 !important;
 }
+
+/* Web reward controls stay on the canvas without shifting the drawing tools. */
+.board #reward-motion { pointer-events: none; }
+#reward-stickers { position: absolute; inset: 0; pointer-events: none; }
+.placed-sticker { pointer-events: all; cursor: grab; touch-action: none; outline: none; }
+.placed-sticker:active { cursor: grabbing; }
+.sticker-handle { fill: transparent; stroke: none; }
+.placed-sticker:focus-visible .sticker-handle,
+.placed-sticker.selected-sticker .sticker-handle {
+  stroke: #7560a7;
+  stroke-width: 1.8;
+  stroke-dasharray: 4 3;
+}
+#reward-hud {
+  position: absolute;
+  inset: 9px 9px auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  pointer-events: none;
+}
+.reward-earned { display: flex; gap: 5px; align-items: center; }
+.reward-button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #dbcde6;
+  border-radius: 13px;
+  padding: 3px 9px;
+  background: #fff9f0;
+  box-shadow: 0 2px 0 #59463324;
+  color: #57466e;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.reward-button svg { width: 23px; height: 23px; }
+.reward-button:disabled { color: #665c66; border-color: #e1d7ce; cursor: default; }
+#reward-chest path { stroke: #785237; stroke-width: 1.7; stroke-linejoin: round; }
+.chest-lid { fill: #ebad6a; }
+.chest-body { fill: #cc8e60; }
+.chest-lock { fill: #ffe784; }
+#reward-chest:disabled svg { opacity: .68; }
+#reward-chest[data-ready="true"] { border-color: #dbb36f; background: #fff0be; color: #604321; }
+#reward-progress {
+  padding: 3px 6px;
+  border-radius: 7px;
+  background: #fff9f0e8;
+  color: #624b64;
+  font-size: 12px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+#reward-preview { background: #f2edf9; }
+.reward-play { fill: #7358a1; }
+.reward-pause { fill: none; stroke: #7358a1; stroke-width: 3; stroke-linecap: round; }
+#reward-preview[aria-pressed="false"] .reward-pause,
+#reward-preview[aria-pressed="true"] .reward-play { display: none; }
+#reward-dialog { width: min(510px, calc(100% - 20px)); }
+#reward-instructions { color: #675772; margin: 4px 0 12px; }
+#reward-catalog {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(69px, 1fr));
+  gap: 7px;
+}
+.reward-option {
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 3px;
+  border: 1px solid #e0d2eb;
+  border-radius: 13px;
+  background: #fffcf7;
+  color: #514164;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.15;
+  padding: 6px 2px;
+  cursor: pointer;
+}
+.reward-option svg { width: 40px; height: 40px; }
+.reward-option:is(:hover,:focus-visible), .reward-button:focus-visible {
+  background: #eee5fb;
+  outline: 2px solid #866bae;
+  outline-offset: 1px;
+}
+#reward-remove { margin-top: 10px; }
+@media (max-width: 450px), (max-height: 520px) {
+  #reward-hud { inset: 5px 5px auto; }
+  .reward-button { padding: 3px 6px; min-height: 37px; font-size: 12px; }
+  .reward-button svg { width: 19px; height: 19px; }
+}

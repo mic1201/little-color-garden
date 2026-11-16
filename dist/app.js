@@ -1,5 +1,6 @@
 import {ORIGINAL_PAPER,paperView,paperPoint,includePoint,rasterSize,beginPaper,paperMarkup} from './paper.js';
 import {createMusic} from './music.js';
+import {createRewards,rewardExportMarkup} from './rewards.js';
 import {clampSpectrum,spectrumColor,spectrumName} from './color-spectrum.js';
 import {drawFills,fillTarget,RAINBOW_COLORS,validFills} from './fills.js';
 import {closureSvgMarkup} from './number-patterns.js';
@@ -15,6 +16,7 @@ const BASIC_COLORS = [
   ['黑色',{x:0,y:1}],['白色',{x:0,y:0}]
 ];
 let colorPosition = BASIC_COLORS[0][1];
+let rewards;
 let stampShape='star',rainbow=false;
 let state={version:1,pattern:'blank',strokes:[]},redo=[],color=spectrumColor(colorPosition),tool='marker',size=20,active=null,pointer=null,frame=0,saving=0,confirmAction=null,exportUrl=null,restoreMessage='',saveFailed=false;
 try{const raw=localStorage.getItem(KEY);if(raw){const parsed=JSON.parse(raw);if(validDocument(parsed,patterns.map(p=>p.id))&&validFills(parsed)){const {numbers,...drawing}=parsed;state={...drawing,fillMode:drawing.fillMode??(numbers===true)}}else restoreMessage='舊暫存無法讀取；請另存喜歡的作品。'}}catch{restoreMessage='瀏覽器無法讀取暫存，離開前請儲存圖片。'}
@@ -24,7 +26,7 @@ const liveInk=document.createElement('canvas');liveInk.width=W;liveInk.height=H;
 const filled=document.createElement('canvas');filled.width=W;filled.height=H;const filledCtx=filled.getContext('2d');
 const committed=document.createElement('canvas');committed.width=W;committed.height=H;const committedCtx=committed.getContext('2d');let dirty=true;
 function updateOverlays(){ $('#outline').innerHTML=paperMarkup(outlineMarkup(state.pattern),view) }
-function paintInk(target,layer,area,preview=false){beginPaper(target,layer,area);for(const stroke of state.strokes)drawStroke(target,stroke);if(preview&&active)drawStroke(target,active);target.setTransform(1,0,0,1,0,0)}
+function paintInk(target,layer,area,preview=false,strokes=state.strokes){beginPaper(target,layer,area);for(const stroke of strokes)drawStroke(target,stroke);if(preview&&active)drawStroke(target,active);target.setTransform(1,0,0,1,0,0)}
 function render(){frame=0;$('#board').style.background=backgroundColor(state);if(dirty){beginPaper(filledCtx,filled,view);drawFills(filledCtx,state,view);filledCtx.setTransform(1,0,0,1,0,0);paintInk(committedCtx,committed,view);dirty=false}ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(filled,0,0);if(active){liveInkCtx.setTransform(1,0,0,1,0,0);liveInkCtx.clearRect(0,0,liveInk.width,liveInk.height);liveInkCtx.drawImage(committed,0,0);liveInkCtx.setTransform(liveInk.width/view.width,0,0,liveInk.height/view.height,-view.x*liveInk.width/view.width,-view.y*liveInk.height/view.height);drawStroke(liveInkCtx,active);liveInkCtx.setTransform(1,0,0,1,0,0);ctx.drawImage(liveInk,0,0)}else ctx.drawImage(committed,0,0);$('#welcome').hidden=state.pattern!=='blank'||state.strokes.length>0||!!state.fills?.length||!!active;$('#welcome').style.display=$('#welcome').hidden?'none':'';$('#undo').disabled=!history.length;$('#redo').disabled=!redo.length}
 function pointAt(x,y,rect){return paperPoint(x,y,rect,view)}
 function rememberPoint(p){state.paper=includePoint(state.paper,p,size*2)}
@@ -32,7 +34,7 @@ function schedule(){if(!frame)frame=requestAnimationFrame(render)}
 function storageWarning(message){$('#save-status').textContent=message;$('#storage-warning').hidden=false}
 $('#storage-warning').onclick=()=>{finish();$('#parent-dialog').showModal()};
 function save(){clearTimeout(saving);try{localStorage.setItem(KEY,JSON.stringify(state));saveFailed=false;$('#storage-warning').hidden=true;$('#save-status').textContent='✓ 已暫存在這台裝置'}catch{saveFailed=true;storageWarning('暫存空間不足，請大人儲存圖片。')}}
-function changed(){dirty=true;render();saving=setTimeout(save,300)}
+function changed(){dirty=true;render();rewards?.stop();rewards?.sync();clearTimeout(saving);saving=setTimeout(save,300)}
 function finish(){if(pointer===null)return;const id=pointer;pointer=null;if(canvas.hasPointerCapture(id))canvas.releasePointerCapture(id);if(active?.points.length){state.strokes.push(active);history.push({kind:'stroke',stroke:active});redo=[]}active=null;changed()}
 function setPattern(id){finish();state={version:1,pattern:id,background:backgroundColor(state),fillMode:state.fillMode===true,strokes:[]};history=[];redo=[];$('#outline').innerHTML=outlineMarkup(id);syncFillMode();requestAnimationFrame(fit);const p=patterns.find(p=>p.id===id);$('#picture-title').textContent=p.icon+' '+p.name;document.querySelectorAll('.pattern').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===id)));filterPatterns();changed()}
 function ask(title,message,fn,target=state.pattern){finish();const preview=$('#confirm-preview');preview.replaceChildren();const before=document.createElement('div');before.className='confirm-sheet';before.style.background=backgroundColor(state);if(typeof canvas.toDataURL==='function'){const image=document.createElement('img');image.src=canvas.toDataURL('image/png');image.alt='';before.append(image)}const lines=document.createElement('div');lines.innerHTML=paperMarkup(outlineMarkup(state.pattern),view);before.style.aspectRatio=String(view.width/view.height);before.append(lines);const arrow=document.createElement('span');arrow.textContent='→';const after=document.createElement('div');after.className='confirm-sheet';after.style.background=backgroundColor(state);after.innerHTML=outlineMarkup(target);preview.append(before,arrow,after);confirmAction=fn;$('#confirm-title').textContent=title;$('#confirm-message').textContent=message;$('#confirm-dialog').showModal()}
@@ -109,25 +111,30 @@ if (nativeApp) {
   $('#export-help').textContent = '用系統分享選單儲存或傳送圖片。直向、橫向都可以畫。';
 }
 
-async function createArtworkPng() {
-  const area = paperView(view.width, view.height, state.paper);
-  const dimensions = rasterSize(area, 4096);
+async function drawArtwork(snapshot, area, maxSize, stickerMarkup='') {
+  const dimensions = rasterSize(area, maxSize);
   const output = document.createElement('canvas');
   const ink = document.createElement('canvas');
   output.width = ink.width = dimensions.width;
   output.height = ink.height = dimensions.height;
   const context = output.getContext('2d');
-  context.fillStyle = backgroundColor(state);
+  context.fillStyle = backgroundColor(snapshot);
   context.fillRect(0, 0, output.width, output.height);
   context.save();
   context.setTransform(output.width / area.width, 0, 0, output.height / area.height,
     -area.x * output.width / area.width, -area.y * output.height / area.height);
-  drawFills(context, state, area);
+  drawFills(context, snapshot, area);
   context.restore();
-  paintInk(ink.getContext('2d'), ink, area);
+  paintInk(ink.getContext('2d'), ink, area, false, snapshot.strokes);
   context.drawImage(ink, 0, 0);
 
-  const outline = new Blob([paperMarkup(exportMarkup(), area)], {type: 'image/svg+xml'});
+  await drawSvg(context, exportMarkup(snapshot.pattern), area);
+  if (stickerMarkup) await drawSvg(context, stickerMarkup, area);
+  return output;
+}
+
+async function drawSvg(context, markup, area) {
+  const outline = new Blob([paperMarkup(markup, area)], {type: 'image/svg+xml'});
   const outlineUrl = URL.createObjectURL(outline);
   try {
     const image = new Image();
@@ -136,10 +143,16 @@ async function createArtworkPng() {
       image.onerror = reject;
       image.src = outlineUrl;
     });
-    context.drawImage(image, 0, 0, output.width, output.height);
+    context.drawImage(image, 0, 0, context.canvas.width, context.canvas.height);
   } finally {
     URL.revokeObjectURL(outlineUrl);
   }
+}
+
+async function createArtworkPng() {
+  const area = paperView(view.width, view.height, state.paper);
+  const markup = rewards ? rewardExportMarkup(state) : '';
+  const output = await drawArtwork(state, area, 4096, markup);
   const png = await new Promise(resolve => output.toBlob(resolve, 'image/png'));
   if (!png) throw new Error('PNG encoding failed');
   return png;
@@ -207,7 +220,7 @@ $('#outline').innerHTML=outlineMarkup(state.pattern);const p=patterns.find(p=>p.
 
 // Resize only the presentation; vector coordinates and the stored document stay intact.
 const app=$('.app'),board=$('#board'),paper=$('.paper-frame');
-function fit(){const r=paper.getBoundingClientRect();const width=Math.max(1,r.width),height=Math.max(1,r.height);view=paperView(width,height,state.paper);board.style.width=width+'px';board.style.height=height+'px';const dimensions=rasterSize(view);for(const layer of [canvas,filled,committed,liveInk]){layer.width=dimensions.width;layer.height=dimensions.height}updateOverlays();dirty=true;render()}
+function fit(){const r=paper.getBoundingClientRect();const width=Math.max(1,r.width),height=Math.max(1,r.height);view=paperView(width,height,state.paper);board.style.width=width+'px';board.style.height=height+'px';const dimensions=rasterSize(view);for(const layer of [canvas,filled,committed,liveInk]){layer.width=dimensions.width;layer.height=dimensions.height}updateOverlays();dirty=true;render();rewards?.resize(view)}
 
 let barsHidden;
 const systemBars = nativeApp && window.Capacitor.Plugins.SystemBars;
@@ -370,7 +383,7 @@ syncColorSwatch();
 
 // Keep the fill boundaries for earlier artwork, including saved v1 drawings.
 function outlineMarkup(id){const base=svgMarkup(id);return base.replace('</svg>',closureSvgMarkup(id).replace(/^<svg[^>]*>/,'').replace('</svg>','')+'</svg>')}
-function exportMarkup(){return outlineMarkup(state.pattern)}
+function exportMarkup(pattern=state.pattern){return outlineMarkup(pattern)}
 function syncFillMode() {
   $('#fill-toggle').setAttribute('aria-pressed', String(!!state.fillMode));
   canvas.setAttribute('aria-label', state.fillMode
@@ -394,3 +407,9 @@ window.addEventListener('pageshow', () => music.setVisible(!document.hidden));
 
 function restoreFill(region,fill){state.fills=(state.fills||[]).filter(f=>f.region!==region);if(fill)state.fills.push(fill)}
 function fillAt(point){const region=fillTarget(state.pattern,point.x,point.y);if(!region)return;const before=(state.fills||[]).find(f=>f.region===region)||null;const after={region,color,rainbow};if(before?.color===color&&before.rainbow===rainbow)return;restoreFill(region,after);history.push({kind:'fill',region,before,after});redo=[];changed()}
+
+if (!nativeApp && document.createElementNS) {
+  rewards = createRewards({board, ink: canvas, getState: () => state, drawArtwork, save});
+  rewards.resize(view);
+  rewards.sync();
+}
