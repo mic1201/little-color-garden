@@ -34,11 +34,10 @@ assert.equal(api.getState().pattern,'cat-clean');
 
 for(const mode of ['normal','fullscreen']){
   if(mode==='fullscreen')await fullscreen.onclick();
-  for(const [i,[id,symbol,name]] of brushUI.brushes.entries()){
+  for(const [i,[id,,name]] of brushUI.brushes.entries()){
     fixedBrush.onclick();
     assert(get('#brush-picker').open);
     get('#tools').children[i].onclick();
-    assert.equal(get('#brush-icon').textContent,id==='stamp'?'★':symbol);
     assert.equal(get('#brush-name').textContent,id==='stamp'?'星星印章':name);
     assert.equal(get('#brush-picker').open,id==='stamp');
     assert.equal(get('#tools').children[i].attrs['aria-pressed'],'true');
@@ -47,10 +46,9 @@ for(const mode of ['normal','fullscreen']){
   fixedBrush.onclick();
   get('#tools').children.find(b=>b.attrs['aria-label']==='蓋印章').onclick();
   assert.equal(get('#stamp-options').hidden,false);
-  for(const [i,[id,symbol,name]]of brushUI.stamps.entries()){
+  for(const [i,[id,,name]]of brushUI.stamps.entries()){
     if(i){fixedBrush.onclick();get('#tools').children.find(b=>b.attrs['aria-label']==='蓋印章').onclick()}
     get('#stamp-options').children[i].onclick();
-    assert.equal(get('#brush-icon').textContent,symbol);
     assert.equal(get('#brush-name').textContent,name+'印章');
     assert(!get('#brush-picker').open);
   }
@@ -177,7 +175,7 @@ console.log('PASS icon-only generated controls, retained labels, picture confirm
 const savedSetter=localStorage.setItem;localStorage.setItem=()=>{throw Error('quota')};api.save();assert.equal(get('#storage-warning').hidden,false);get('#storage-warning').onclick();assert.equal(get('#parent-dialog').open,true);assert.match(get('#save-status').textContent,/暫存空間不足/);localStorage.setItem=savedSetter;api.save();assert.equal(get('#storage-warning').hidden,true);console.log('PASS visible storage warning and parent details with recovery.');
 
 const savedDrawing=JSON.stringify(api.getState().strokes);const savedBackground=api.getState().background;
-toggleFill();assert.equal(api.getState().fillMode,true);assert.equal(bucketTool().attrs['aria-pressed'],'true');assert.equal(get('#brush-icon').textContent,'🪣');assert.equal(fixedBrush.dataset.activeTool,'fill');assert(!api.exportMarkup().includes('<text '));
+toggleFill();assert.equal(api.getState().fillMode,true);assert.equal(bucketTool().attrs['aria-pressed'],'true');assert.equal(get('#brush-name').textContent,'畫桶');assert.equal(fixedBrush.dataset.activeTool,'fill');assert(!api.exportMarkup().includes('<text '));
 toggleFill();assert.equal(api.getState().fillMode,false);assert.equal(JSON.stringify(api.getState().strokes),savedDrawing);assert.equal(api.getState().background,savedBackground);
 toggleFill();api.save();assert.equal(JSON.parse([...store.values()][0]).fillMode,true);assert(engine.validDocument(JSON.parse([...store.values()][0]),pats.patterns.map(p=>p.id)));assert(!engine.validDocument({...api.getState(),fillMode:'yes'},pats.patterns.map(p=>p.id)));
 await get('#fullscreen-toggle').onclick();get('#pattern-open').onclick();assert.equal(get('#pattern-dialog').open,true);get('#pattern-close').onclick();assert.equal(get('#pattern-dialog').open,false);assert.equal(JSON.stringify(api.getState().strokes),savedDrawing);
@@ -243,7 +241,7 @@ const restored = run(...Object.values(paper),...Object.values(engine),...Object.
 assert.equal(restored.getState().pattern, previousArt.pattern);
 assert.equal(restored.getState().fillMode, true);
 assert.equal(bucketTool().attrs['aria-pressed'],'true');
-assert.equal(get('#brush-icon').textContent,'🪣');
+assert.equal(get('#brush-name').textContent,'畫桶');
 assert.deepEqual(restored.getState().fills, previousArt.fills);
 assert(!('numbers' in restored.getState()));
 assert(!restored.exportMarkup().includes('<text'));

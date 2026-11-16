@@ -44,7 +44,7 @@ function syncTool() {
   const selected = state.fillMode ? 'fill' : tool;
   const summary = $('#brush-summary');
   summary.dataset.activeTool = selected;
-  updateBrushSummary(summary, $('#brush-icon'), $('#brush-name'), selected, stampShape);
+  updateBrushSummary(summary, $('#brush-name'), selected, stampShape);
   stampOptions.hidden = selected !== 'stamp';
   for (const entry of document.querySelectorAll('.tool')) {
     entry.setAttribute('aria-pressed', String(entry.dataset.tool === selected));
