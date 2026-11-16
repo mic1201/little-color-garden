@@ -2,7 +2,7 @@ import {ORIGINAL_PAPER,paperView,paperPoint,includePoint,rasterSize,beginPaper,p
 import {createMusic} from './music.js';
 import {createRewards,rewardExportMarkup} from './rewards.js';
 import {clampSpectrum,spectrumColor,spectrumName} from './color-spectrum.js';
-import {drawFills,fillTarget,RAINBOW_COLORS,validFills} from './fills.js';
+import {drawFills,fillTarget,randomFillGradient,RAINBOW_COLORS,validFills} from './fills.js';
 import {closureSvgMarkup} from './number-patterns.js';
 import {brushes,stamps,updateBrushSummary} from './brush-ui.js';
 import {createFocusMode} from './viewport.js';
@@ -428,7 +428,18 @@ window.addEventListener('pagehide', () => music.setVisible(false));
 window.addEventListener('pageshow', () => music.setVisible(!document.hidden));
 
 function restoreFill(region,fill){state.fills=(state.fills||[]).filter(f=>f.region!==region);if(fill)state.fills.push(fill)}
-function fillAt(point){const region=fillTarget(state.pattern,point.x,point.y);if(!region)return;const before=(state.fills||[]).find(f=>f.region===region)||null;const after={region,color,rainbow};if(before?.color===color&&before.rainbow===rainbow)return;restoreFill(region,after);history.push({kind:'fill',region,before,after});redo=[];changed()}
+function fillAt(point) {
+  const region = fillTarget(state.pattern, point.x, point.y);
+  if (!region) return;
+  const before = (state.fills || []).find(fill => fill.region === region) ?? null;
+  if (!rainbow && before?.color === color && !before.rainbow) return;
+  const after = {region, color, rainbow};
+  if (rainbow) after.gradient = randomFillGradient(state.pattern, region, state.paper);
+  restoreFill(region, after);
+  history.push({kind:'fill', region, before, after});
+  redo = [];
+  changed();
+}
 
 if (!nativeApp && document.createElementNS) {
   rewards = createRewards({board, ink: canvas, getState: () => state, canCelebrate: () => pointer === null, motionArtwork, save});

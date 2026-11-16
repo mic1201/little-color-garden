@@ -189,6 +189,12 @@ tap(101,490,455);assert.equal(api.getState().strokes.length,0);assert.equal(api.
 chooseSpectrum(0,.5);tap(102,490,455);assert.equal(api.getState().fills.length,1);assert.equal(api.getState().fills[0].color,'#ff0000');get('#undo').onclick();assert.equal(api.getState().fills[0].color,purple);get('#redo').onclick();assert.equal(api.getState().fills[0].color,'#ff0000');
 tap(103,5,5);assert.equal(api.getState().fills.at(-1).region,fills.PAPER_REGION);get('#undo').onclick();assert.equal(api.getState().fills.length,1);
 get('#color-open').onclick();rainbowSwatch.onclick();tap(104,490,455);assert.equal(api.getState().fills[0].rainbow,true);
+const firstGradient = api.getState().fills[0].gradient;
+tap(105,490,455);
+const secondGradient = api.getState().fills[0].gradient;
+assert.notDeepEqual(firstGradient, secondGradient);
+get('#undo').onclick();assert.deepEqual(api.getState().fills[0].gradient, firstGradient);
+get('#redo').onclick();assert.deepEqual(api.getState().fills[0].gradient, secondGradient);
 chooseSpectrum(.5,.3);tap(106,490,455);assert.equal(api.getState().fills[0].rainbow,false);api.save();assert(fills.validFills(JSON.parse([...store.values()][0])));
 get('#fill-toggle').onclick();assert.equal(api.getState().fillMode,false);assert.equal(api.getState().fills.length,1);get('#tools').children[0].onclick();tap(105,500,450);assert.equal(api.getState().strokes.length,1);
 get('#fill-toggle').onclick();assert.equal(api.getState().fills.length,1);get('#patterns').children.find(p=>p.dataset.id==='blank').onclick();assert.equal(get('#confirm-dialog').open,true);get('#cancel').onclick();assert.equal(api.getState().fills.length,1);get('#patterns').children.find(p=>p.dataset.id==='blank').onclick();get('#confirm').onclick();assert(!api.getState().fills?.length);

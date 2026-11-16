@@ -1,7 +1,7 @@
 import {beginPaper} from './dist/paper.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {drawFills,validFills} from './dist/fills.js';
+import {drawFills,fillPaint,randomFillGradient,validFills} from './dist/fills.js';
 import {getFillRegions} from './dist/fill-regions.js';
 const region=getFillRegions('sea-turtle')[0];
 const state={pattern:'sea-turtle',fills:[{region:region.id,color:'#123456',rainbow:false}],strokes:[{tool:'eraser'}]};
@@ -10,6 +10,19 @@ drawFills(ctx,state);
 assert.equal(rectangles.length,region.spans.length);
 region.spans.forEach(([y,x1,x2],i)=>assert.deepEqual(rectangles[i],[x1,y,x2-x1,1]));
 assert(validFills(state));assert(validFills({pattern:'cat'}));assert(!validFills({...state,fills:[state.fills[0],state.fills[0]]}));assert(!validFills({...state,fills:[{...state.fills[0],region:'not-a-region'}]}));assert(!validFills({...state,fills:[{...state.fills[0],color:'url(x)'}]}));
+const first = randomFillGradient(state.pattern, region.id, undefined, () => .25);
+const second = randomFillGradient(state.pattern, region.id, undefined, () => .75);
+assert.notDeepEqual(first, second);
+assert(first[1] < first[3] && second[1] > second[3]);
+const gradientArgs = [];
+const gradientCtx = {createLinearGradient(...points) { gradientArgs.push(points); return {addColorStop(){}}; }};
+const legacyRainbow = {...state.fills[0],rainbow:true};
+const savedRainbow = {...legacyRainbow,gradient:first};
+assert(validFills(JSON.parse(JSON.stringify({...state,fills:[savedRainbow]}))));
+assert(!validFills({...state,fills:[{...legacyRainbow,gradient:[1,2,1,2]}]}));
+fillPaint(gradientCtx, legacyRainbow);
+fillPaint(gradientCtx, savedRainbow);
+assert.deepEqual(gradientArgs, [[0,0,1000,900], first]);
 // Execute the actual render function with distinct layer contexts, not a single-context DOM mock.
 const app=fs.readFileSync('./dist/app.js','utf8');
 const paintSource=app.slice(app.indexOf('function paintInk('),app.indexOf('function render(){'));

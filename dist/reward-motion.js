@@ -1,5 +1,5 @@
 import {backgroundColor, H, W} from './engine.js';
-import {PAPER_REGION, RAINBOW_COLORS} from './fills.js';
+import {fillPaint, PAPER_REGION} from './fills.js';
 import {paperMasks} from './paper-masks.js';
 
 const oscillate = (t, period) => Math.sin(t * 2 * Math.PI / period);
@@ -280,17 +280,14 @@ function copy(image, mask) {
   return context;
 }
 
-function addBackdrop(context, state, {area, width, height, sx, sy}) {
+function addBackdrop(context, state, {area, sx, sy}) {
   const fill = state.fills?.find(fill => fill.region === PAPER_REGION);
+  context.save();
   context.globalCompositeOperation = 'destination-over';
-  context.fillStyle = fill?.color ?? backgroundColor(state);
-  if (fill?.rainbow) {
-    const gradient = context.createLinearGradient(-area.x * sx, -area.y * sy, (W - area.x) * sx, (H - area.y) * sy);
-    RAINBOW_COLORS.forEach((color, i) => gradient.addColorStop(i / (RAINBOW_COLORS.length - 1), color));
-    context.fillStyle = gradient;
-  }
-  context.fillRect(0, 0, width, height);
-  context.globalCompositeOperation = 'source-over';
+  context.setTransform(sx, 0, 0, sy, -area.x * sx, -area.y * sy);
+  context.fillStyle = fill ? fillPaint(context, fill) : backgroundColor(state);
+  context.fillRect(area.x, area.y, area.width, area.height);
+  context.restore();
 }
 
 export function createMotionScene(state, art, parts) {
