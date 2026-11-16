@@ -144,14 +144,15 @@ async function drawArtwork(snapshot, area, maxSize, stickerMarkup='') {
 }
 
 async function motionArtwork(snapshot) {
-  const area = ORIGINAL_PAPER;
-  const paper = artworkCanvas(area);
-  const ink = artworkCanvas(area);
-  const outline = artworkCanvas(area);
+  const area = snapshot.paper ?? ORIGINAL_PAPER;
+  const dimensions = rasterSize(area, 1200);
+  const paper = artworkCanvas(dimensions);
+  const ink = artworkCanvas(dimensions);
+  const outline = artworkCanvas(dimensions);
   paintArtworkPaper(paper.getContext('2d'), snapshot, area);
   paintInk(ink.getContext('2d', {willReadFrequently: true}), ink, area, false, snapshot.strokes);
   await drawSvg(outline.getContext('2d'), exportMarkup(snapshot.pattern), area);
-  return {paper, ink, outline};
+  return {area, paper, ink, outline};
 }
 
 async function drawSvg(context, markup, area) {

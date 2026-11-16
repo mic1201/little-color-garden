@@ -104,7 +104,7 @@ export function motionFor(pattern) {
 }
 
 const PIXELS = W * H;
-const NEIGHBOR_ROWS = [-W, 0, W];
+const WARP_PADDING = 64;
 let lastGeometry;
 
 function insidePart({rect: [left, top, right, bottom], polygon}, x, y) {
@@ -121,19 +121,20 @@ function insidePart({rect: [left, top, right, bottom], polygon}, x, y) {
 
 // Visit whole painted components. Include diagonal neighbors so thin lines
 // and antialiased edges cannot be split between animation layers.
-function visitComponents(mask, visit) {
-  const queue = new Int32Array(PIXELS);
-  for (let start = 0; start < PIXELS; start++) {
+function visitComponents(mask, visit, width = W) {
+  const queue = new Int32Array(mask.length);
+  const rows = [-width, 0, width];
+  for (let start = 0; start < mask.length; start++) {
     if (!mask[start]) continue;
     let end = 1;
     queue[0] = start;
     mask[start] = 0;
     for (let i = 0; i < end; i++) {
       const pixel = queue[i];
-      const x = pixel % W;
+      const x = pixel % width;
       const first = x === 0 ? 0 : -1;
-      const last = x === W - 1 ? 0 : 1;
-      for (const d of NEIGHBOR_ROWS) {
+      const last = x === width - 1 ? 0 : 1;
+      for (const d of rows) {
         for (let dx = first; dx <= last; dx++) {
           const neighbor = pixel + d + dx;
           if (!mask[neighbor]) continue;
@@ -195,41 +196,61 @@ export function motionPartAt(pattern, parts, {x, y}) {
   return motionGeometry(pattern, parts)[Math.floor(y) * W + Math.floor(x)] - 1;
 }
 
-export function inkMotionOwners(rgba, geometry) {
-  const mask = new Uint8Array(PIXELS);
-  for (let i = 0; i < PIXELS; i++) mask[i] = rgba[i * 4 + 3] !== 0;
-  const owners = new Uint8Array(PIXELS);
+export function inkMotionOwners(rgba, geometry, width = W) {
+  const mask = new Uint8Array(geometry.length);
+  for (let i = 0; i < mask.length; i++) mask[i] = rgba[i * 4 + 3] !== 0;
+  const owners = new Uint8Array(mask.length);
+  const coverage = new Uint32Array(256);
   visitComponents(mask, (pixels, length) => {
-    const owner = geometry[pixels[0]];
-    if (!owner) return;
-    for (let i = 1; i < length; i++) if (geometry[pixels[i]] !== owner) return;
-    for (let i = 0; i < length; i++) owners[pixels[i]] = owner;
-  });
+    coverage.fill(0);
+    let winner = 0;
+    for (let i = 0; i < length; i++) {
+      const part = geometry[pixels[i]];
+      if (part && ++coverage[part] > coverage[winner]) winner = part;
+    }
+    // Background pixels count toward the component size. Exactly 80% stays put.
+    if (coverage[winner] * 5 <= length * 4) return;
+    for (let i = 0; i < length; i++) owners[pixels[i]] = winner;
+  }, width);
   return owners;
 }
 
-function surface() {
+function surface(width, height) {
   const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
+  canvas.width = width;
+  canvas.height = height;
   return canvas.getContext('2d');
 }
 
-function rasterPaths(owners, count) {
+function projectGeometry(geometry, {area, width, height, sx, sy}) {
+  if (!area.x && !area.y && sx === 1 && sy === 1 && width === W && height === H) return geometry;
+  const projected = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    const sourceY = Math.floor(area.y + (y + .5) / sy);
+    if (sourceY < 0 || sourceY >= H) continue;
+    for (let x = 0; x < width; x++) {
+      const sourceX = Math.floor(area.x + (x + .5) / sx);
+      if (sourceX >= 0 && sourceX < W) projected[y * width + x] = geometry[sourceY * W + sourceX];
+    }
+  }
+  return projected;
+}
+
+function rasterPaths(owners, count, width, height) {
   const all = new Path2D();
   const layers = Array.from({length: count}, () => null);
-  for (let y = 0; y < H; y++) {
-    const row = y * W;
-    for (let x = 0; x < W;) {
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    for (let x = 0; x < width;) {
       const owner = owners[row + x];
       if (!owner) {
         x++;
         continue;
       }
       let end = x + 1;
-      while (end < W && owners[row + end] === owner) end++;
+      while (end < width && owners[row + end] === owner) end++;
       all.rect(x, y, end - x, 1);
-      const layer = layers[owner - 1] ??= {path: new Path2D(), bounds: [W, H, 0, 0]};
+      const layer = layers[owner - 1] ??= {path: new Path2D(), bounds: [width, height, 0, 0]};
       layer.path.rect(x, y, end - x, 1);
       const bounds = layer.bounds;
       bounds[0] = Math.min(bounds[0], x);
@@ -250,34 +271,38 @@ function removePixels(context, path) {
 }
 
 function copy(image, mask) {
-  const context = surface();
+  const context = surface(image.width, image.height);
+  context.save();
   if (mask) context.clip(mask);
   context.drawImage(image, 0, 0);
+  context.restore();
   return context;
 }
 
-function addBackdrop(context, state) {
+function addBackdrop(context, state, {area, width, height, sx, sy}) {
   const fill = state.fills?.find(fill => fill.region === PAPER_REGION);
   context.globalCompositeOperation = 'destination-over';
   context.fillStyle = fill?.color ?? backgroundColor(state);
   if (fill?.rainbow) {
-    const gradient = context.createLinearGradient(0, 0, W, H);
+    const gradient = context.createLinearGradient(-area.x * sx, -area.y * sy, (W - area.x) * sx, (H - area.y) * sy);
     RAINBOW_COLORS.forEach((color, i) => gradient.addColorStop(i / (RAINBOW_COLORS.length - 1), color));
     context.fillStyle = gradient;
   }
-  context.fillRect(0, 0, W, H);
+  context.fillRect(0, 0, width, height);
   context.globalCompositeOperation = 'source-over';
 }
 
 export function createMotionScene(state, art, parts) {
-  const geometry = motionGeometry(state.pattern, parts);
-  const masks = rasterPaths(geometry, parts.length);
+  const {width, height} = art.paper;
+  const raster = {area: art.area, width, height, sx: width / art.area.width, sy: height / art.area.height};
+  const geometry = projectGeometry(motionGeometry(state.pattern, parts), raster);
+  const masks = rasterPaths(geometry, parts.length, width, height);
   const hasInk = state.strokes.some(stroke => stroke.tool !== 'eraser');
-  const inkMasks = hasInk ? rasterPaths(inkMotionOwners(art.ink.getContext('2d').getImageData(0, 0, W, H).data, geometry), parts.length) : null;
+  const inkMasks = hasInk ? rasterPaths(inkMotionOwners(art.ink.getContext('2d').getImageData(0, 0, width, height).data, geometry, width), parts.length, width, height) : null;
 
   const base = copy(art.paper);
   removePixels(base, masks.all);
-  addBackdrop(base, state);
+  addBackdrop(base, state, raster);
   const stillOutline = copy(art.outline);
   removePixels(stillOutline, masks.all);
   const stillInk = hasInk ? copy(art.ink) : null;
@@ -288,17 +313,20 @@ export function createMotionScene(state, art, parts) {
     if (!mask) continue;
     const colors = copy(art.paper, mask.path);
     const inkMask = inkMasks?.layers[i];
+    let bounds = mask.bounds;
     if (inkMask) {
+      // The whole assigned ink component can extend beyond the silhouette.
       colors.clip(inkMask.path);
       colors.drawImage(art.ink, 0, 0);
+      bounds = bounds.map((edge, j) => (j < 2 ? Math.min : Math.max)(edge, inkMask.bounds[j]));
     }
     layers.push({
-      ...parts[i], bounds: mask.bounds, colors: colors.canvas,
+      ...parts[i], bounds, colors: colors.canvas,
       outline: copy(art.outline, mask.path).canvas,
-      warped: parts[i].axis ? surface() : null
+      warped: parts[i].axis ? surface(width + 2 * WARP_PADDING, height + 2 * WARP_PADDING) : null
     });
   }
-  return {base: base.canvas, stillInk: stillInk?.canvas, outline: stillOutline.canvas, layers};
+  return {raster, base: base.canvas, stillInk: stillInk?.canvas, outline: stillOutline.canvas, layers};
 }
 
 const angleRadians = angle => (angle ?? 0) * Math.PI / 180;
@@ -319,55 +347,71 @@ export function transformSticker(part, sticker, time) {
   };
 }
 
-function drawWarp(context, part, image, time) {
+function drawWarp(context, part, image, time, {area, sx, sy}) {
   const [left, top, right, bottom] = part.bounds;
   const vertical = part.axis === 'y';
   const start = vertical ? top : left;
   const end = vertical ? bottom : right;
+  const [partLeft, partTop, partRight, partBottom] = part.rect;
+  function rasterOffset(position) {
+    const axis = vertical ? area.y + position / sy : area.x + position / sx;
+    const from = vertical ? partTop : partLeft;
+    const to = vertical ? partBottom : partRight;
+    const {x = 0, y = 0} = part.offset(Math.max(from, Math.min(to, axis)), time);
+    return {x: x * sx, y: y * sy};
+  }
   // Rasterize shared edges at the same integer coordinate so neighboring
   // strips meet even when the shape narrows or moves by a fraction of a pixel.
   for (let a = start; a < end; a += 12) {
     const b = Math.min(a + 12, end);
     const step = b - a;
-    const from = part.offset(a, time);
-    const to = part.offset(b, time);
+    const from = rasterOffset(a);
+    const to = rasterOffset(b);
     context.save();
     if (vertical) {
-      const top = Math.round(a + (from.y ?? 0));
-      const bottom = Math.round(b + (to.y ?? 0));
-      const x = from.x ?? 0;
-      context.transform(1, 0, ((to.x ?? 0) - x) / step, (bottom - top) / step, x, top);
+      const top = Math.round(a + from.y);
+      const bottom = Math.round(b + to.y);
+      const x = from.x;
+      context.transform(1, 0, (to.x - x) / step, (bottom - top) / step, x, top);
       context.drawImage(image, left, a, right - left, step, left, 0, right - left, step);
     } else {
-      const left = Math.round(a + (from.x ?? 0));
-      const right = Math.round(b + (to.x ?? 0));
-      const y = from.y ?? 0;
-      context.transform((right - left) / step, ((to.y ?? 0) - y) / step, 0, 1, left, y);
+      const left = Math.round(a + from.x);
+      const right = Math.round(b + to.x);
+      const y = from.y;
+      context.transform((right - left) / step, (to.y - y) / step, 0, 1, left, y);
       context.drawImage(image, a, top, step, bottom - top, 0, top, step, bottom - top);
     }
     context.restore();
   }
 }
 
-function drawPart(context, part, image, time) {
+function drawLayer(context, image, {area, sx, sy}, padding = 0) {
+  context.drawImage(image, area.x - padding / sx, area.y - padding / sy, image.width / sx, image.height / sy);
+}
+
+function drawPart(context, part, image, time, raster) {
   const {dx = 0, dy = 0, angle = 0, pivot = [0, 0]} = part.pose?.(time) ?? zeroPose;
   const [x, y] = pivot;
   if (part.warped) {
-    part.warped.clearRect(0, 0, W, H);
-    drawWarp(part.warped, part, image, time);
+    part.warped.clearRect(0, 0, part.warped.canvas.width, part.warped.canvas.height);
+    part.warped.save();
+    part.warped.translate(WARP_PADDING, WARP_PADDING);
+    drawWarp(part.warped, part, image, time, raster);
+    part.warped.restore();
   }
   context.save();
   context.translate(dx + x, dy + y);
   context.rotate(angleRadians(angle));
   context.translate(-x, -y);
-  context.drawImage(part.warped?.canvas ?? image, 0, 0);
+  drawLayer(context, part.warped?.canvas ?? image, raster, part.warped ? WARP_PADDING : 0);
   context.restore();
 }
 
 export function drawMotionScene(context, scene, time) {
-  context.drawImage(scene.base, 0, 0);
-  for (const part of scene.layers) drawPart(context, part, part.colors, time);
-  if (scene.stillInk) context.drawImage(scene.stillInk, 0, 0);
-  context.drawImage(scene.outline, 0, 0);
-  for (const part of scene.layers) drawPart(context, part, part.outline, time);
+  const {raster} = scene;
+  drawLayer(context, scene.base, raster);
+  for (const part of scene.layers) drawPart(context, part, part.colors, time, raster);
+  if (scene.stillInk) drawLayer(context, scene.stillInk, raster);
+  drawLayer(context, scene.outline, raster);
+  for (const part of scene.layers) drawPart(context, part, part.outline, time, raster);
 }

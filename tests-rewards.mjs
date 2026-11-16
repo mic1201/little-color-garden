@@ -63,12 +63,27 @@ assert.equal(motionPartAt('whale-clean', whale, {x:175,y:329}), 1, 'the left bub
 assert.equal(motionPartAt('whale-clean', whale, {x:211,y:435}), -1);
 
 const brushInk = new Uint8ClampedArray(W * H * 4);
-for (let x = 200; x <= 380; x++) brushInk[(450 * W + x) * 4 + 3] = 128;
+for (let x = 155; x <= 380; x++) brushInk[(450 * W + x) * 4 + 3] = 128;
 for (let x = 300; x <= 350; x++) brushInk[(460 * W + x) * 4 + 3] = 128;
 const movingInk = inkMotionOwners(brushInk, whaleOwners);
 assert.equal(whaleOwners[450 * W + 350], 1);
-assert.equal(movingInk[450 * W + 350], 0, 'an ink line crossing the foreground stays entirely still');
+assert.equal(movingInk[450 * W + 350], 0, 'an ink line below the coverage threshold stays entirely still');
 assert.equal(movingInk[460 * W + 350], 1, 'ink wholly on the whale moves with it');
+
+const turtle = motionFor('sea-turtle-clean');
+const turtleOwners = motionGeometry('sea-turtle-clean', turtle);
+const turtleInk = new Uint8ClampedArray(W * H * 4);
+for (let x = 320; x <= 760; x++) turtleInk[(337 * W + x) * 4 + 3] = 255;
+for (let x = 770; x <= 960; x++) turtleInk[(510 * W + x) * 4 + 3] = 255;
+const turtleMotion = inkMotionOwners(turtleInk, turtleOwners);
+assert.equal(turtleOwners[337 * W + 760], 0);
+assert(turtleMotion.slice(337 * W + 320, 337 * W + 761).every(owner => owner === 1), 'the entire stroke moves, including the overhang');
+assert(turtleMotion.slice(510 * W + 770, 510 * W + 961).every(owner => owner === 0), 'a mostly outside stroke stays put');
+
+const connectedInk = new Uint8ClampedArray(10 * 4);
+for (let i = 3; i < connectedInk.length; i += 4) connectedInk[i] = 255;
+assert.deepEqual([...inkMotionOwners(connectedInk, Uint8Array.of(1,1,1,1,1,1,1,1,2,2), 10)], Array(10).fill(0));
+assert.deepEqual([...inkMotionOwners(connectedInk, Uint8Array.of(1,1,1,1,1,1,1,1,1,2), 10)], Array(10).fill(1));
 
 assert.equal(stickers.length, 30);
 assert.equal(new Set(stickers.map(([id]) => id)).size, 30);
