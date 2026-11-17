@@ -2,10 +2,13 @@ import {beginPaper, includePoint, ORIGINAL_PAPER, paperPoint, rasterSize} from '
 import {createPaintProgress, REWARD_THRESHOLD} from './reward-progress.js';
 import {createMotionScene, drawMotionScene, motionFor, motionPartAt, transformSticker} from './reward-motion.js';
 import {placedStickerArt, stickerArt, stickerById, stickerIcon, stickers, STICKER_SIZE, SVG_NS} from './reward-stickers.js';
+import {itemById} from './avatar-art.js';
 
 const MAX_PLACED = 100;
 const radius = STICKER_SIZE / 2;
 const clamp = (n, low, high) => Math.max(low, Math.min(n, high));
+const wearableKey = id => `wear:${id}`;
+const outfitPiece = key => typeof key === 'string' && key.startsWith('wear:') ? itemById.get(key.slice(5)) : undefined;
 
 function isSticker(sticker) {
   return sticker && stickerById.has(sticker.id) &&
@@ -26,7 +29,7 @@ function readReward(state) {
 }
 
 function collectionIds(ids) {
-  return Array.isArray(ids) ? ids.filter(id => stickerById.has(id)) : [];
+  return Array.isArray(ids) ? ids.filter(id => stickerById.has(id) || outfitPiece(id)) : [];
 }
 
 export function rewardCollection(state) {
@@ -48,8 +51,10 @@ export function changeRewardCollection(state, restore) {
   return state.rewardCollection;
 }
 
-export function chooseReward(collected, random = Math.random) {
-  const available = stickers.map(([id]) => id).filter(id => !collected.includes(id));
+export function chooseReward(collected, random = Math.random, wardrobe = false) {
+  const ids = stickers.map(([id]) => id);
+  if (wardrobe) ids.push(...[...itemById.keys()].map(wearableKey));
+  const available = ids.filter(id => !collected.includes(id));
   return available[Math.floor(random() * available.length)] ?? null;
 }
 
@@ -100,11 +105,12 @@ function createChestAudio() {
   };
 }
 
-function stickerGhost(id) {
+function stickerGhost(id, icon) {
   const ghost = document.createElement('div');
   ghost.className = 'reward-floating-sticker';
   ghost.setAttribute('aria-hidden', 'true');
-  ghost.innerHTML = stickerIcon(id);
+  if (icon) ghost.append(icon);
+  else ghost.innerHTML = stickerIcon(id);
   document.body.append(ghost);
   return ghost;
 }
@@ -118,7 +124,7 @@ function ghostAt({x, y}, scale = 1) {
   return `translate(${x - 28}px,${y - 28}px) scale(${scale})`;
 }
 
-export function createRewards({board, ink, getState, motionArtwork, canCelebrate, save}) {
+export function createRewards({board, ink, getState, motionArtwork, canCelebrate, save, avatar}) {
   const hud = board.querySelector('#reward-hud');
   const progress = board.querySelector('#reward-progress');
   const playback = board.querySelector('#reward-playback');
@@ -131,7 +137,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   const trayButton = document.querySelector('#reward-open');
   const inventory = document.querySelector('#reward-inventory');
   const emptyTray = document.querySelector('#reward-empty');
-  emptyTray.textContent = `塗色達到 ${REWARD_THRESHOLD}% 就能收集裝飾品。`;
+  emptyTray.textContent = `塗色達到 ${REWARD_THRESHOLD}% 就能開寶箱。`;
   const collectionSettings = document.querySelector('#reward-collection-settings');
   const collectionCount = document.querySelector('#reward-collection-count');
   const resetCollection = document.querySelector('#reward-collection-reset');
@@ -172,15 +178,19 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   }
 
   function updateInventory() {
-    emptyTray.hidden = collected.length > 0;
-    inventory.hidden = !collected.length;
-    collectionCount.textContent = `已收集 ${collected.length} 件裝飾品`;
+    const stickerCount = collected.filter(id => stickerById.has(id)).length;
+    emptyTray.hidden = stickerCount > 0;
+    inventory.hidden = stickerCount === 0;
+    collectionCount.textContent = avatar
+      ? `已收集 ${stickerCount} 件裝飾品、${collected.length - stickerCount} 件穿搭`
+      : `已收集 ${stickerCount} 件裝飾品`;
     resetCollection.disabled = collected.length === 0;
     restoreCollection.hidden = collectionIds(state.rewardCollectionBackup).length === 0;
+    avatar?.updateCollection(collected.map(id => outfitPiece(id)?.id).filter(Boolean));
   }
 
   function renderInventory() {
-    inventory.replaceChildren(...collected.map(makeInventoryItem));
+    inventory.replaceChildren(...collected.filter(id => stickerById.has(id)).map(makeInventoryItem));
     updateInventory();
   }
 
@@ -207,11 +217,16 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     audio.clear();
     flight.animation?.cancel();
     flight.ghost?.remove();
-    delete flight.item.dataset.arriving;
-    flight.item.tabIndex = 0;
     celebration.hidden = true;
-    if (tray.hidden) trayButton.dataset.new = '';
-    status.textContent = `收集到${stickerById.get(flight.id).name}，可以打開裝飾品拖到畫布。`;
+    if (flight.piece) {
+      avatar.markReward(flight.piece.id);
+      status.textContent = `收集到${flight.piece.name}，可以到主角衣櫃穿上。`;
+    } else {
+      delete flight.item.dataset.arriving;
+      flight.item.tabIndex = 0;
+      if (tray.hidden) trayButton.dataset.new = '';
+      status.textContent = `收集到${stickerById.get(flight.id).name}，可以打開裝飾品拖到畫布。`;
+    }
   }
 
   function stop() {
@@ -220,6 +235,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     board.removeAttribute('data-celebrating');
     updatePlayback(false);
     motionLayer.hidden = true;
+    avatar?.stop();
     stickerNodes.forEach(({element, sticker}) => poseSticker(element, sticker));
     finishFlight();
   }
@@ -240,10 +256,12 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
       const anchors = stickerNodes.map(({sticker}) => parts[motionPartAt(state.pattern, parts, sticker)]);
       const started = performance.now();
       motionLayer.hidden = false;
+      avatar?.begin();
       function next(now) {
         motionTime = (now - started) / 1000;
         beginPaper(context, motionLayer, area);
         drawMotionScene(context, scene, motionTime);
+        avatar?.playFrame(snapshot.pattern, parts[0], motionTime);
         stickerNodes.forEach(({element, sticker}, i) => {
           if (anchors[i]) poseSticker(element, transformSticker(anchors[i], sticker, motionTime));
         });
@@ -257,10 +275,12 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     }
   }
 
-  function showChest(id, item) {
-    item.dataset.arriving = '';
-    item.tabIndex = -1;
-    const flight = {id, item};
+  function showChest(id, item, piece) {
+    if (item) {
+      item.dataset.arriving = '';
+      item.tabIndex = -1;
+    }
+    const flight = {id, item, piece};
     flyingReward = flight;
     celebration.hidden = false;
     flight.sound = setTimeout(audio.play, 605);
@@ -271,9 +291,9 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
       }
       const center = centerOf(chest);
       const start = {x: center.x, y: center.y - chest.getBoundingClientRect().height * .12};
-      if (!tray.hidden) item.scrollIntoView({block: 'nearest'});
-      const end = centerOf(tray.hidden ? trayButton : item);
-      flight.ghost = stickerGhost(id);
+      if (item && !tray.hidden) item.scrollIntoView({block: 'nearest'});
+      const end = centerOf(piece ? avatar.button : tray.hidden ? trayButton : item);
+      flight.ghost = stickerGhost(id, piece && avatar.createIcon(piece.id));
       if (!flight.ghost.animate) {
         finishFlight();
         return;
@@ -291,14 +311,15 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
 
   function award() {
     reward.completed = true;
-    const id = chooseReward(collected);
+    const id = chooseReward(collected, Math.random, Boolean(avatar));
     if (id) collected.push(id);
     persist();
     if (id) {
-      const item = makeInventoryItem(id);
-      inventory.append(item);
+      const piece = outfitPiece(id);
+      const item = piece ? null : makeInventoryItem(id);
+      if (item) inventory.append(item);
       updateInventory();
-      showChest(id, item);
+      showChest(id, item, piece);
     }
     void play();
   }

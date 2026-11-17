@@ -510,3 +510,85 @@ p { line-height: 1.62; }
   #reward-hud { inset: 5px 5px auto; }
 }
 .reward-item[data-arriving] { opacity: 0; pointer-events: none; }
+
+.paper-frame.has-avatar {
+  --avatar-gutter: clamp(38px, 9vmin, 53px);
+  position: relative;
+  padding: var(--avatar-gutter);
+  background: #e7eddd;
+}
+.has-avatar .board {
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px #82927b55, 0 3px 0 #82927b38;
+}
+#avatar-track {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.toolbar-actions:has(#avatar-open:not([hidden])) { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+#avatar-open { position: relative; background: #e8efe1; }
+#avatar-open canvas { width: 30px; height: 30px; pointer-events: none; }
+#avatar-open[data-new]::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #a94c81;
+}
+.avatar-portrait {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  padding: 6px 8px 8px;
+  border-radius: 15px;
+  background: #f1ebf7;
+}
+#avatar-portrait { display: block; width: auto; max-width: 100%; height: clamp(136px, 28dvh, 232px); touch-action: none; }
+#avatar-colors { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+#avatar-colors button, #avatar-slots button {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: #fffdf9;
+}
+#avatar-colors button[aria-pressed="true"], #avatar-slots button[aria-pressed="true"], #avatar-items button[aria-pressed="true"] {
+  border-color: var(--selected);
+  background: #e7eee2;
+}
+#avatar-colors span { width: 25px; height: 25px; border: 1px solid #35444a30; border-radius: 50%; background: var(--avatar-color); }
+#avatar-undo { font-size: 23px; }
+.avatar-wardrobe-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 9px 0 3px; }
+.avatar-wardrobe-header h3 { margin: 0; font-size: 17px; }
+#avatar-change { min-height: 44px; padding-inline: 10px; border: 1px solid var(--tool-border); border-radius: 11px; background: #f4f0e7; }
+#avatar-slots { display: flex; flex-wrap: wrap; gap: 4px; }
+#avatar-slots button { border-color: var(--tool-border); font-size: 21px; position: relative; }
+#avatar-slots button[data-owned]::after { content: ''; position: absolute; right: 5px; top: 5px; width: 5px; height: 5px; border-radius: 50%; background: #7a5f9b; }
+#avatar-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 6px; margin-top: 8px; }
+#avatar-items button, .avatar-choices button {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 5px;
+  border: 1px solid var(--tool-border);
+  border-radius: 12px;
+  background: #faf6ed;
+  font-size: 13px;
+}
+#avatar-items canvas { width: 42px; height: 42px; }
+#avatar-empty { margin-bottom: 4px; color: #566257; font-size: 14px; }
+.avatar-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.avatar-choices button { font-size: 16px; }
+.avatar-choices canvas { display: block; width: 100%; max-height: 38dvh; object-fit: contain; }

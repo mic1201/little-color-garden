@@ -52,7 +52,7 @@
     </g>
   </svg>
 </div>
-<div id="welcome" class="welcome"><span aria-hidden="true">🖍️</span><div class="welcome-trail" aria-hidden="true">· 〰 ·</div><p class="sr-only">用手指或觸控筆開始畫畫</p></div></div></div></div></main><div class="drawing-toolbar" aria-label="畫畫工具" role="group">
+<div id="welcome" class="welcome"><span aria-hidden="true">🖍️</span><div class="welcome-trail" aria-hidden="true">· 〰 ·</div><p class="sr-only">用手指或觸控筆開始畫畫</p></div></div><canvas id="avatar-track" aria-hidden="true" hidden></canvas></div></div></main><div class="drawing-toolbar" aria-label="畫畫工具" role="group">
   <div class="toolbar-paint">
     <button id="color-open" class="toolbar-button color-open" aria-label="選畫筆顏色" aria-haspopup="dialog"><span id="current-color" aria-hidden="true"></span></button>
     <button id="brush-summary" class="toolbar-button brush-open" aria-label="選工具" aria-haspopup="dialog"><span id="brush-icon" aria-hidden="true">🖍️</span><span id="brush-name" class="sr-only">彩色筆</span></button>
@@ -66,6 +66,7 @@
     <button id="reward-open" type="button" class="toolbar-button" aria-label="裝飾品" title="裝飾品" aria-expanded="false" aria-controls="reward-tray" hidden>
       <svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11h18v11H4zM2.5 7h21v4h-21zM13 7v15M13 7C3 8 6 0 10 3zm0 0c10 1 7-7 3-4z"/></svg>
     </button>
+    <button id="avatar-open" type="button" class="toolbar-button" aria-label="我的小主角" aria-haspopup="dialog" hidden><canvas width="56" height="56" aria-hidden="true"></canvas></button>
     <div id="reward-tray" class="reward-tray" role="group" aria-label="收集的裝飾品" hidden>
       <p id="reward-empty"></p>
       <div id="reward-inventory" hidden></div>
@@ -74,6 +75,26 @@
 </div>
 <button id="storage-warning" class="storage-warning" hidden aria-label="需要大人協助，點一下查看作品儲存訊息" title="請大人幫忙">⚠️</button>
 </div>
+<dialog id="avatar-closet" aria-labelledby="avatar-closet-title">
+  <div class="dialog-title"><h2 id="avatar-closet-title">我的小主角</h2><button id="avatar-close" type="button" class="close" aria-label="關閉主角畫布">×</button></div>
+  <div class="avatar-portrait">
+    <canvas id="avatar-portrait" width="480" height="608" role="img" aria-label="主角畫布，用手指畫在主角身上"></canvas>
+    <div id="avatar-colors" role="group" aria-label="主角畫筆">
+      <button id="avatar-undo" type="button" aria-label="復原主角筆跡">↶</button>
+    </div>
+  </div>
+  <div class="avatar-wardrobe-header"><h3>我的衣櫃</h3><button id="avatar-change" type="button">換主角</button></div>
+  <div id="avatar-slots" role="group" aria-label="穿搭分類"></div>
+  <div id="avatar-items" role="group" aria-label="收集的穿搭"></div>
+  <p id="avatar-empty">畫圖開寶箱，就有機會收集新穿搭。</p>
+</dialog>
+<dialog id="avatar-choose" aria-labelledby="avatar-choose-title">
+  <div class="dialog-title"><h2 id="avatar-choose-title">選一個小主角</h2><button id="avatar-choose-close" type="button" class="close" aria-label="關閉主角選擇" hidden>×</button></div>
+  <div class="avatar-choices">
+    <button type="button" data-avatar-person="boy"><canvas width="240" height="304" aria-hidden="true"></canvas>小男孩</button>
+    <button type="button" data-avatar-person="girl"><canvas width="240" height="304" aria-hidden="true"></canvas>小女孩</button>
+  </div>
+</dialog>
 <dialog id="brush-picker" aria-label="選擇工具">
   <div class="dialog-title"><h2 aria-label="畫畫工具"><span aria-hidden="true">🖍️</span></h2><button id="brush-close" class="close" aria-label="關閉工具選單">×</button></div>
   <div id="tools" class="tools" role="group" aria-label="工具種類"></div>

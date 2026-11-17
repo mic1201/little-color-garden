@@ -1,6 +1,7 @@
 import {ORIGINAL_PAPER,paperView,paperPoint,includePoint,rasterSize,beginPaper,paperMarkup} from './paper.js';
 import {createMusic} from './music.js';
 import {createRewards,rewardExportMarkup} from './rewards.js';
+import {createGameAvatar} from './avatar-game.js';
 import {clampSpectrum,spectrumColor,spectrumName} from './color-spectrum.js';
 import {drawFills,fillTarget,randomFillGradient,RAINBOW_COLORS,validFills} from './fills.js';
 import {closureSvgMarkup} from './number-patterns.js';
@@ -17,6 +18,7 @@ const BASIC_COLORS = [
 ];
 let colorPosition = BASIC_COLORS[0][1];
 let rewards;
+let avatar;
 let stampShape='star',rainbow=false;
 let state={version:1,pattern:'blank',strokes:[]},redo=[],color=spectrumColor(colorPosition),tool='marker',size=20,active=null,pointer=null,frame=0,saving=0,confirmAction=null,exportUrl=null,restoreMessage='',saveFailed=false;
 try{const raw=localStorage.getItem(KEY);if(raw){const parsed=JSON.parse(raw);if(validDocument(parsed,patterns.map(p=>p.id))&&validFills(parsed)){const {numbers,...drawing}=parsed;state={...drawing,fillMode:drawing.fillMode??(numbers===true)}}else restoreMessage='舊暫存無法讀取；請另存喜歡的作品。'}}catch{restoreMessage='瀏覽器無法讀取暫存，離開前請儲存圖片。'}
@@ -244,7 +246,26 @@ $('#outline').innerHTML=outlineMarkup(state.pattern);const p=patterns.find(p=>p.
 
 // Resize only the presentation; vector coordinates and the stored document stay intact.
 const app=$('.app'),board=$('#board'),paper=$('.paper-frame');
-function fit(){const r=paper.getBoundingClientRect();const width=Math.max(1,r.width),height=Math.max(1,r.height);view=paperView(width,height,state.paper);board.style.width=width+'px';board.style.height=height+'px';const dimensions=rasterSize(view);for(const layer of [canvas,filled,committed,liveInk]){layer.width=dimensions.width;layer.height=dimensions.height}updateOverlays();dirty=true;render();rewards?.resize(view)}
+function fit(){
+  if (avatar) {
+    board.style.width='';
+    board.style.height='';
+  }
+  const r=(avatar ? board : paper).getBoundingClientRect();
+  const width=Math.max(1,r.width),height=Math.max(1,r.height);
+  view=paperView(width,height,state.paper);
+  if (!avatar) {
+    board.style.width=width+'px';
+    board.style.height=height+'px';
+  }
+  const dimensions=rasterSize(view);
+  for(const layer of [canvas,filled,committed,liveInk]){layer.width=dimensions.width;layer.height=dimensions.height}
+  updateOverlays();
+  dirty=true;
+  render();
+  rewards?.resize(view);
+  avatar?.resize(view);
+}
 
 let barsHidden;
 const systemBars = nativeApp && window.Capacitor.Plugins.SystemBars;
@@ -433,7 +454,8 @@ function fillAt(point) {
 }
 
 if (document.createElementNS) {
-  rewards = createRewards({board, ink: canvas, getState: () => state, canCelebrate: () => pointer === null, motionArtwork, save});
+  if (nativeApp) avatar = createGameAvatar({board, refit: fit});
+  rewards = createRewards({board, ink: canvas, getState: () => state, canCelebrate: () => pointer === null, motionArtwork, save, avatar});
   rewards.resize(view);
   rewards.sync();
 }
