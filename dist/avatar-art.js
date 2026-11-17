@@ -444,25 +444,26 @@ function drawHead(ctx,person,ink,blink) {
   line(ctx,'M115 111Q122 119 130 111',LINE,2.4);
 }
 
-function arm(ctx,x,y,angle,top,person,glove,ink) {
+function arm(ctx,x,y,angle,top,person,glove,inkFor) {
   ctx.save();
   ctx.translate(x,y);
   ctx.rotate(angle);
   const armPath = 'M-7 12Q-9 21-8 33Q-7 43-6 45Q0 51 7 44Q9 36 8 29Q9 19 7 12Z';
   const sleeve = 'M-10 4Q-10-5 0-5Q10-5 10 4L10 12Q9 15 6 16Q-1 18-10 14Z';
   const origin = [x,y,x<120 ? .28 : -.28];
-  paint(ctx,armPath,SKIN,null);
-  paintMarks(ctx,armPath,ink,origin);
-  line(ctx,armPath);
-  paint(ctx,sleeve,top?.color ?? (person==='girl'?'#b7a7e2':'#88c6b7'),null);
-  paintMarks(ctx,sleeve,ink,origin);
-  line(ctx,sleeve);
-  drawGlove(ctx,0,46,glove,ink,origin);
+  paint(ctx,armPath,SKIN,LINE,3.4,inkFor(),origin);
+  paint(ctx,sleeve,top?.color ?? (person==='girl'?'#b7a7e2':'#88c6b7'),LINE,3.4,inkFor(top),origin);
+  drawGlove(ctx,0,46,glove,inkFor(glove),origin);
   ctx.restore();
 }
 
-export function drawAvatar(ctx, person, equipped, ink, pose = {}) {
+export function drawAvatar(ctx, person, equipped, ink, pose = {}, onSurface) {
   const worn = slot => itemById.get(equipped[slot]);
+  const inkFor = piece => {
+    const surface = piece?.id ?? 'body';
+    onSurface?.(surface);
+    return ink instanceof Map ? ink.get(surface) : ink;
+  };
   const {stride=0, climb=0, wave=0, glide=0, bagSwing=0, headTilt=0, blink=false, crouch=0, flap=0, earBounce=0} = pose;
   const top = worn('top'), pants = worn('pants'), gloves = worn('gloves'), shoes = worn('shoes'), bag = worn('bag');
   for (const [side,x] of [[-1,105],[1,135]]) {
@@ -471,30 +472,28 @@ export function drawAvatar(ctx, person, equipped, ink, pose = {}) {
     ctx.rotate(side*stride*.68);
     ctx.translate(-x,-207);
     const leg = `M${x-9} 220H${x+9}V269H${x-9}Z`;
-    paint(ctx,leg,SKIN,null);
-    paintMarks(ctx,leg,ink);
-    line(ctx,leg);
-    drawPantsLeg(ctx,x,205,pants,person,ink);
-    drawShoe(ctx,x,269,shoes,ink);
+    paint(ctx,leg,SKIN,LINE,3.4,inkFor());
+    drawPantsLeg(ctx,x,205,pants,person,inkFor(pants));
+    drawShoe(ctx,x,269,shoes,inkFor(shoes));
     ctx.restore();
   }
   ctx.save();
   ctx.translate(0,crouch*7);
-  if(bag?.style==='back') drawPack(ctx,bag,bagSwing,flap,ink);
-  arm(ctx,88,151,.28 - stride*.52 + climb*(1.45 + .68*stride) + glide*.96,top,person,gloves,ink);
-  arm(ctx,152,151,-.28 + stride*.52 - climb*(1.45 - .68*stride) - Math.max(glide*.96,wave*(2.1+.3*stride)),top,person,gloves,ink);
-  paint(ctx,'M112 121H132V140Q123 147 112 140Z',SKIN);
-  drawTop(ctx,top,person,ink);
-  drawSuspenders(ctx,pants,ink);
-  drawCape(ctx,top,bagSwing,Boolean(worn('neck')),ink);
-  drawNecklace(ctx,worn('neck'),ink);
-  if(bag?.style==='sling') drawSling(ctx,bag,bagSwing,ink);
+  if(bag?.style==='back') drawPack(ctx,bag,bagSwing,flap,inkFor(bag));
+  arm(ctx,88,151,.28 - stride*.52 + climb*(1.45 + .68*stride) + glide*.96,top,person,gloves,inkFor);
+  arm(ctx,152,151,-.28 + stride*.52 - climb*(1.45 - .68*stride) - Math.max(glide*.96,wave*(2.1+.3*stride)),top,person,gloves,inkFor);
+  paint(ctx,'M112 121H132V140Q123 147 112 140Z',SKIN,LINE,3.4,inkFor());
+  drawTop(ctx,top,person,inkFor(top));
+  drawSuspenders(ctx,pants,inkFor(pants));
+  drawCape(ctx,top,bagSwing,Boolean(worn('neck')),inkFor(top));
+  drawNecklace(ctx,worn('neck'),inkFor(worn('neck')));
+  if(bag?.style==='sling') drawSling(ctx,bag,bagSwing,inkFor(bag));
   ctx.save();
   ctx.translate(121,133);
   ctx.rotate(headTilt);
   ctx.translate(-121,-133);
-  drawHead(ctx,person,ink,blink);
-  drawHat(ctx,worn('hat'),earBounce,ink);
+  drawHead(ctx,person,inkFor(),blink);
+  drawHat(ctx,worn('hat'),earBounce,inkFor(worn('hat')));
   ctx.restore();
   ctx.restore();
 }
@@ -528,13 +527,16 @@ export function makeAvatarInk(canvas, strokes, pending) {
   const ctx=canvas.getContext('2d');
   ctx.clearRect(0,0,AVATAR_W,AVATAR_H);
   for (const stroke of pending ? [...strokes,pending] : strokes) {
-    if (stroke.color === AVATAR_RAINBOW) {
+    const rainbow = stroke.color === AVATAR_RAINBOW;
+    const tool = stroke.tool ?? 'marker';
+    if (rainbow || tool !== 'marker') {
       // Match the drawing brush's colour cycle to the smaller avatar canvas.
       const scale = 4;
       ctx.save();
       ctx.scale(1 / scale, 1 / scale);
       drawStroke(ctx, {
-        tool:'marker', rainbow:true, color:'#ef7790', size:6.5 * scale,
+        tool, rainbow, color:rainbow ? '#ef7790' : stroke.color, size:6.5 * scale,
+        seed:stroke.seed, stamp:stroke.stamp,
         points:stroke.points.map(({x,y}) => ({x:x * scale, y:y * scale}))
       });
       ctx.restore();

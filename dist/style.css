@@ -543,7 +543,7 @@ p { line-height: 1.62; }
 }
 #avatar-portrait { cursor: crosshair; touch-action: none; }
 .avatar-editing .board { visibility: hidden; }
-.avatar-editing #avatar-tools { grid-template-columns: repeat(2, minmax(44px, 1fr)); }
+.avatar-editing #avatar-tools { grid-template-columns: repeat(3, minmax(44px, 1fr)); }
 .avatar-editing .toolbar-actions { grid-template-columns: repeat(3, minmax(44px, 1fr)); }
 #avatar-open { position: relative; background: #e8efe1; }
 #pattern-open, #avatar-pattern { position: relative; }

@@ -43,19 +43,30 @@ function ask(title,message,fn,target=state.pattern){finish();const preview=$('#c
 const brushPicker = $('#brush-picker');
 const stampOptions = $('#stamp-options');
 function syncTool() {
-  const selected = state.fillMode ? 'fill' : tool;
-  const summary = $('#brush-summary');
+  const editingAvatar = Boolean(avatar?.editing);
+  const selected = editingAvatar ? avatar.tool : state.fillMode ? 'fill' : tool;
+  const selectedStamp = editingAvatar ? avatar.stamp : stampShape;
+  const summary = $(editingAvatar ? '#avatar-brush-open' : '#brush-summary');
   summary.dataset.activeTool = selected;
-  updateBrushSummary(summary, $('#brush-name'), selected, stampShape);
+  updateBrushSummary(summary, $(editingAvatar ? '#avatar-brush-name' : '#brush-name'), selected, selectedStamp);
   stampOptions.hidden = selected !== 'stamp';
   for (const entry of document.querySelectorAll('.tool')) {
+    entry.hidden = editingAvatar && entry.dataset.tool === 'fill';
     entry.setAttribute('aria-pressed', String(entry.dataset.tool === selected));
+  }
+  for (const entry of document.querySelectorAll('.stamp-choice')) {
+    entry.setAttribute('aria-pressed', String(entry.dataset.stamp === selectedStamp));
   }
   canvas.setAttribute('aria-label', state.fillMode
     ? '點填色畫布，選色後點圖案區塊或畫紙背景' : '畫畫區，用手指或觸控筆拖曳繪畫');
 }
 $('#brush-summary').onclick = () => {
   finish();
+  brushPicker.showModal();
+};
+$('#avatar-brush-open').onclick = () => {
+  avatar.pauseEditor();
+  syncTool();
   brushPicker.showModal();
 };
 $('#brush-close').onclick = () => brushPicker.close();
@@ -67,6 +78,13 @@ for (const [id,icon,name] of brushes) {
   button.setAttribute('aria-label',name);
   button.onclick = () => {
     finish();
+    if (avatar?.editing) {
+      if (id==='fill') return;
+      avatar.setTool(id);
+      syncTool();
+      if (stampOptions.hidden) brushPicker.close();
+      return;
+    }
     const isFill = id === 'fill';
     const changedMode = !!state.fillMode !== isFill;
     state.fillMode = isFill;
@@ -80,16 +98,15 @@ for (const [id,icon,name] of brushes) {
 for (const [id,icon,name] of stamps) {
   const button = document.createElement('button');
   button.className = 'stamp-choice';
+  button.dataset.stamp = id;
   button.textContent = icon;
   button.setAttribute('aria-label',name+'印章');
   button.setAttribute('aria-pressed',String(id===stampShape));
   button.onclick = () => {
     finish();
-    stampShape = id;
+    if (avatar?.editing) avatar.setStamp(id);
+    else stampShape = id;
     syncTool();
-    for (const entry of document.querySelectorAll('.stamp-choice')) {
-      entry.setAttribute('aria-pressed',String(entry===button));
-    }
     brushPicker.close();
   };
   stampOptions.append(button);
@@ -523,6 +540,7 @@ if (document.createElementNS) {
       $('.toolbar-paint').hidden = editing;
       for (const id of ['avatar-tools','avatar-open','avatar-undo']) $(`#${id}`).hidden = !editing;
       for (const id of ['undo','redo','reward-open']) $(`#${id}`).hidden = editing;
+      syncTool();
       document.querySelectorAll('.pattern').forEach(b=>b.setAttribute('aria-pressed',String(!editing && b.dataset.id===state.pattern)));
       fit();
       rewards.sync();

@@ -1,9 +1,11 @@
-import {AVATAR_W, AVATAR_H, AVATAR_RAINBOW, drawAvatar, drawWardrobeItem, itemById, makeAvatarInk, restoreOutfit, wardrobe} from './avatar-art.js';
+import {AVATAR_W, AVATAR_H, AVATAR_RAINBOW, drawAvatar, drawWardrobeItem, itemById, restoreOutfit, wardrobe} from './avatar-art.js';
+import {createAvatarPainting} from './avatar-paint.js';
 import {drawActor, enterDuration, insidePose, patrolPose, patrolTrack, sceneById, stageToPicture} from './avatar-stage.js';
 import {createToolbarInteractions} from './avatar-toolbar.js';
 import {ORIGINAL_PAPER} from './paper.js';
 import {transformSticker} from './reward-motion.js';
 import {RAINBOW_COLORS} from './fills.js';
+import {TOOLS, STAMPS} from './engine.js';
 
 const KEY = 'little-color-garden-avatar-v1';
 const IDLE_DELAY = 3000;
@@ -21,15 +23,23 @@ export function restoreAvatar(saved) {
   const person = people.includes(saved?.person) ? saved.person : null;
   const profiles = Object.fromEntries(people.map(id => {
     const profile = saved?.profiles?.[id];
+    const equipped = restoreOutfit(profile?.equipped);
+    const legacyOutfit = {...equipped};
     const strokes = Array.isArray(profile?.strokes) ? profile.strokes.slice(-120).filter(stroke =>
       brushColors.some(([, color]) => color === stroke?.color) &&
+      (stroke.tool === undefined || TOOLS.includes(stroke.tool)) &&
+      (stroke.stamp === undefined || STAMPS.includes(stroke.stamp)) &&
+      (stroke.seed === undefined || Number.isInteger(stroke.seed) && stroke.seed >= 0 && stroke.seed <= 4294967295) &&
       Array.isArray(stroke.points) && stroke.points.length > 0 && stroke.points.length <= 640 &&
       stroke.points.every(p => p && Number.isFinite(p.x) && Number.isFinite(p.y) &&
         p.x >= 0 && p.x <= AVATAR_W && p.y >= 0 && p.y <= AVATAR_H)
-    ) : [];
+    ).map(stroke => ({
+      ...stroke,
+      outfit: stroke.outfit ? restoreOutfit(stroke.outfit) : legacyOutfit
+    })) : [];
     const background = typeof profile?.background === 'string' && /^#[0-9a-f]{6}$/i.test(profile.background)
       ? profile.background : DEFAULT_BACKGROUND;
-    return [id, {equipped: restoreOutfit(profile?.equipped), strokes, background}];
+    return [id, {equipped, strokes, background}];
   }));
   return {person, profiles, editorOpen: Boolean(person && saved?.editorOpen !== false)};
 }
@@ -111,9 +121,7 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
   const unequip = $('#avatar-unequip');
   const fittingStatus = $('#avatar-fitting-status');
   const status = $('#reward-status');
-  const ink = document.createElement('canvas');
-  ink.width = AVATAR_W;
-  ink.height = AVATAR_H;
+  const paintAvatar = createAvatarPainting();
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   let collection = new Set();
@@ -121,6 +129,9 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
   let fittingOutfit = {};
   let category = wardrobe[0];
   let color = colors[0][1];
+  let tool = 'marker';
+  let stamp = 'star';
+  let ink;
   let colorTarget = 'brush';
   let pending;
   let pointer;
@@ -248,7 +259,7 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
   function updatePortrait() {
     if (!state.person) return;
     gear = Object.fromEntries(Object.entries(outfit()).filter(([, id]) => collection.has(id)));
-    makeAvatarInk(ink, profile().strokes, pending);
+    ink = paintAvatar(state.person, profile().strokes, pending);
     undo.disabled = profile().strokes.length === 0;
     icon.setTransform(1, 0, 0, 1, 0, 0);
     icon.clearRect(0, 0, 76, 76);
@@ -381,7 +392,7 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
     cancelIdle();
     pointer = event.pointerId;
     portrait.setPointerCapture(pointer);
-    pending = {color, points: []};
+    pending = {color, tool, stamp, seed:crypto.getRandomValues(new Uint32Array(1))[0], outfit:{...gear}, points:[]};
     appendPoint(portraitPoint(event));
     updatePortrait();
   };
@@ -481,6 +492,10 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
   return {
     button: patternButton,
     get editing() { return editing; },
+    get tool() { return tool; },
+    get stamp() { return stamp; },
+    setTool(value) { tool = value; },
+    setStamp(value) { stamp = value; },
     start() {
       tile.hidden = false;
       track.hidden = false;

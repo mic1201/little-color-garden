@@ -34,7 +34,16 @@ const avatarStrokes=[{color:'#ef7790',points:avatarPoints},{color:AVATAR_RAINBOW
 const restoredAvatarStrokes=restoreAvatar(JSON.parse(JSON.stringify({
   person:'girl',profiles:{girl:{strokes:avatarStrokes}}
 }))).profiles.girl.strokes;
-assert.deepEqual(restoredAvatarStrokes,avatarStrokes,'Avatar saves retain both rainbow and legacy solid strokes');
+assert.deepEqual(restoredAvatarStrokes,avatarStrokes.map(stroke=>({...stroke,outfit:{}})),
+  'Avatar saves retain both rainbow and legacy solid strokes');
+const migratedProfile=restoreAvatar({
+  person:'girl',profiles:{girl:{equipped:{bag:'wingpack'},strokes:[
+    avatarStrokes[0],{...avatarStrokes[1],tool:'crayon',outfit:{bag:'moon'}}
+  ]}}
+}).profiles.girl;
+migratedProfile.equipped.bag='apple';
+assert.equal(migratedProfile.strokes[0].outfit.bag,'wingpack','Older marks use a snapshot of the equipped outfit');
+assert.equal(migratedProfile.strokes[1].outfit.bag,'moon','New marks retain the outfit used when they were drawn');
 assert.deepEqual(recordAvatarInk(restoredAvatarStrokes),recordAvatarInk(avatarStrokes));
 assert.deepEqual(recordAvatarInk([avatarStrokes[0]]),['#ef7790']);
 assert(new Set(recordAvatarInk([avatarStrokes[1]]).filter(color=>color.startsWith('hsl('))).size>5);
