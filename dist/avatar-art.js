@@ -84,11 +84,12 @@ function shape(d) {
   return pathCache.get(d);
 }
 
-function paint(ctx, d, fill, stroke = LINE, width = 3.4) {
-  const path = shape(d);
+function paint(ctx, d, fill, stroke = LINE, width = 3.4, ink, rest) {
+  const path = typeof d === 'string' ? shape(d) : d;
   if (fill) {
     ctx.fillStyle = fill;
     ctx.fill(path);
+    paintMarks(ctx,path,ink,rest);
   }
   line(ctx, path, stroke, width);
 }
@@ -102,23 +103,19 @@ function line(ctx, d, color = LINE, width = 3.4) {
   ctx.stroke(typeof d === 'string' ? shape(d) : d);
 }
 
-function oval(ctx, x, y, rx, ry, fill, stroke, width = 3) {
+function oval(ctx, x, y, rx, ry, fill, stroke, width = 3, ink, rest) {
   const path = new Path2D();
   path.ellipse(x,y,rx,ry,0,0,Math.PI * 2);
-  ctx.fillStyle = fill;
-  ctx.fill(path);
-  if (stroke) line(ctx,path,stroke,width);
+  paint(ctx,path,fill,stroke ?? null,width,ink,rest);
 }
 
-function rect(ctx, x, y, w, h, radius, fill, stroke = LINE) {
+function rect(ctx, x, y, w, h, radius, fill, stroke = LINE, ink, rest) {
   const path = new Path2D();
   path.roundRect(x,y,w,h,radius);
-  ctx.fillStyle = fill;
-  ctx.fill(path);
-  if (stroke) line(ctx,path,stroke,3);
+  paint(ctx,path,fill,stroke,3,ink,rest);
 }
 
-function star(ctx,x,y,r,color) {
+function star(ctx,x,y,r,color,ink) {
   const path = new Path2D();
   for(let i=0;i<10;i++) {
     const a = -Math.PI/2 + i*Math.PI/5;
@@ -127,34 +124,35 @@ function star(ctx,x,y,r,color) {
     else path.moveTo(x+length*Math.cos(a),y+length*Math.sin(a));
   }
   path.closePath();
-  ctx.fillStyle = color;
-  ctx.fill(path);
+  paint(ctx,path,color,null,0,ink);
 }
 
-function cloud(ctx,x,y,color) {
+function cloud(ctx,x,y,color,ink) {
   ctx.save();
   ctx.translate(x,y);
-  paint(ctx,'M-13 5Q-17-1-10-5Q-9-12-2-9Q1-14 7-8Q13-8 15-2Q18 7 7 8H-8Z',color,LINE,2.1);
+  paint(ctx,'M-13 5Q-17-1-10-5Q-9-12-2-9Q1-14 7-8Q13-8 15-2Q18 7 7 8H-8Z',color,LINE,2.1,ink,[x,y,0]);
   ctx.restore();
 }
 
-function bearFace(ctx,x,y,color,trim) {
-  oval(ctx,x-8,y-7,4.6,4.6,color,LINE,1.8);
-  oval(ctx,x+8,y-7,4.6,4.6,color,LINE,1.8);
-  oval(ctx,x,y,10,8.5,color,LINE,1.8);
-  oval(ctx,x,y+3,4.3,3,trim);
+function bearFace(ctx,x,y,color,trim,ink) {
+  oval(ctx,x-8,y-7,4.6,4.6,color,LINE,1.8,ink);
+  oval(ctx,x+8,y-7,4.6,4.6,color,LINE,1.8,ink);
+  oval(ctx,x,y,10,8.5,color,LINE,1.8,ink);
+  oval(ctx,x,y+3,4.3,3,trim,null,0,ink);
   oval(ctx,x-3.9,y-1.3,1.1,1.3,LINE);
   oval(ctx,x+3.9,y-1.3,1.1,1.3,LINE);
   oval(ctx,x,y+1,1.5,1.1,LINE);
 }
 
-function paintMarks(ctx,d,ink,armOrigin) {
+function paintMarks(ctx,d,ink,rest) {
   if (!ink) return;
   ctx.save();
-  ctx.clip(shape(d));
-  if (armOrigin) {
-    const [x,y,angle] = armOrigin;
+  ctx.clip(typeof d === 'string' ? shape(d) : d);
+  if (rest) {
+    // Map the moving surface back to its position on the drawing canvas.
+    const [x,y,angle,flip=1] = rest;
     ctx.rotate(-angle);
+    if (flip === -1) ctx.scale(-1,1);
     ctx.translate(-x,-y);
   }
   ctx.drawImage(ink,0,0,AVATAR_W,AVATAR_H);
@@ -172,7 +170,7 @@ function drawTop(ctx,piece,person,ink) {
     ctx.restore();
   }
   if (piece?.id === 'hoodie') {
-    paint(ctx,'M95 147Q101 131 120 137Q141 131 147 148L133 159 121 151 108 159Z',trim);
+    paint(ctx,'M95 147Q101 131 120 137Q141 131 147 148L133 159 121 151 108 159Z',trim,LINE,3.4,ink);
     line(ctx,'M120 154V209 M105 190Q120 196 136 190',LINE,2.3);
   } else if(piece?.id!=='bearcape') {
     paint(ctx,'M108 137Q121 147 133 137Q133 152 120 152Q109 150 108 137Z',trim,LINE,2.1);
@@ -190,15 +188,15 @@ function drawTop(ctx,piece,person,ink) {
   line(ctx,bodyPath);
 }
 
-function drawCape(ctx,piece,flutter=0,necklace=false) {
+function drawCape(ctx,piece,flutter=0,necklace=false,ink) {
   if(piece?.id!=='bearcape') return;
   ctx.save();
   ctx.translate(120,144);
   ctx.rotate(flutter * .06);
   ctx.translate(-120,-144);
-  paint(ctx,'M94 150Q101 143 111 141Q121 151 132 141Q141 143 148 150Q154 156 154 166Q144 178 122 170Q100 178 88 166Q89 156 94 150Z',piece.trim);
+  paint(ctx,'M94 150Q101 143 111 141Q121 151 132 141Q141 143 148 150Q154 156 154 166Q144 178 122 170Q100 178 88 166Q89 156 94 150Z',piece.trim,LINE,3.4,ink);
   line(ctx,'M94 167Q105 174 119 168M126 168Q139 173 148 167','#c18360',2.2);
-  bearFace(ctx,necklace?106:121,157,piece.color,WHITE);
+  bearFace(ctx,necklace?106:121,157,piece.color,WHITE,ink);
   ctx.restore();
 }
 
@@ -257,27 +255,27 @@ function drawShoe(ctx,x,y,piece,ink) {
   if (piece?.id==='spring') line(ctx,`M${x-4} ${y}l5-7 5 7 5-7 `,trim,2.7);
   if (piece?.id==='boot') line(ctx,`M${x-8} ${y-14}H${x+7}`,trim,3.3);
   if (piece?.id==='rabbitslippers') {
-    oval(ctx,x+13,y-8,3,7,fill,LINE,1.7);
-    oval(ctx,x+20,y-9,3,7.5,fill,LINE,1.7);
-    oval(ctx,x+17,y-3,7.7,4.8,fill,LINE,1.7);
+    oval(ctx,x+13,y-8,3,7,fill,LINE,1.7,ink);
+    oval(ctx,x+20,y-9,3,7.5,fill,LINE,1.7,ink);
+    oval(ctx,x+17,y-3,7.7,4.8,fill,LINE,1.7,ink);
     oval(ctx,x+14.4,y-4,1.05,1.15,LINE);
     oval(ctx,x+19.7,y-4,1.05,1.15,LINE);
     oval(ctx,x+17.4,y-1.8,1.4,1,trim);
   }
   if (piece?.id==='star-skates') {
     star(ctx,x+11,y-1,6,trim);
-    oval(ctx,x-4,y+13,4.3,4.3,trim,LINE,2);
-    oval(ctx,x+16,y+13,4.3,4.3,trim,LINE,2);
+    oval(ctx,x-4,y+13,4.3,4.3,trim,LINE,2,ink);
+    oval(ctx,x+16,y+13,4.3,4.3,trim,LINE,2,ink);
   }
 }
 
-function drawGlove(ctx,x,y,piece) {
+function drawGlove(ctx,x,y,piece,ink,rest) {
   if (!piece) {
-    oval(ctx,x,y,9.6,11,SKIN,LINE);
+    oval(ctx,x,y,9.6,11,SKIN,LINE,3,ink,rest);
     return;
   }
-  oval(ctx,x,y,11,13,piece.color,LINE);
-  if (piece.id==='mitten') oval(ctx,x+9,y-2,5,7,piece.color,LINE,2.1);
+  oval(ctx,x,y,11,13,piece.color,LINE,3,ink,rest);
+  if (piece.id==='mitten') oval(ctx,x+9,y-2,5,7,piece.color,LINE,2.1,ink,rest);
   line(ctx,`M${x-8} ${y-8}H${x+8}`,piece.trim,3);
   if (piece.id==='flower') {
     for (let i=0;i<5;i++) oval(ctx,x+4*Math.cos(i*1.256),y+4*Math.sin(i*1.256),2.9,2.9,piece.trim);
@@ -294,90 +292,95 @@ function drawGlove(ctx,x,y,piece) {
   }
 }
 
-function drawHat(ctx,piece,wiggle=0) {
+function drawHat(ctx,piece,wiggle=0,ink) {
   if (!piece) return;
   const {id,color,trim} = piece;
   if (id==='cap') {
-    paint(ctx,'M74 69Q77 38 112 35Q148 33 160 69L166 72Q186 75 188 80Q177 88 149 83L77 78Z',color);
+    paint(ctx,'M74 69Q77 38 112 35Q148 33 160 69L166 72Q186 75 188 80Q177 88 149 83L77 78Z',color,LINE,3.4,ink);
     line(ctx,'M121 37Q129 51 127 68M79 70Q118 67 156 72',trim,4);
-    star(ctx,105,55,8,trim);
+    star(ctx,105,55,8,trim,ink);
   } else if(id==='sunhat') {
-    paint(ctx,'M79 65Q84 36 109 35H135Q153 39 160 65Q191 69 192 77Q182 94 120 90Q66 90 55 79Q58 70 79 65Z',color);
+    paint(ctx,'M79 65Q84 36 109 35H135Q153 39 160 65Q191 69 192 77Q182 94 120 90Q66 90 55 79Q58 70 79 65Z',color,LINE,3.4,ink);
     line(ctx,'M78 66Q120 79 162 66',trim,7);
-    oval(ctx,151,68,7,7,'#fff4c4',LINE,2.2);
+    oval(ctx,151,68,7,7,'#fff4c4',LINE,2.2,ink);
   } else if(id==='rabbit-ears') {
     for(const [x,side] of [[101,-1],[140,1]]) {
       ctx.save();
       ctx.translate(x,61);
-      ctx.rotate(side*.17+wiggle*(side<0?.17:.24));
-      paint(ctx,'M-10 0Q-16-14-13-36Q-10-63 0-60Q14-58 12-37Q13-15 10 0Z',color);
-      oval(ctx,0,-34,5,17,trim);
+      const angle = side * .17;
+      const rest = [x,61,angle];
+      ctx.rotate(angle+wiggle*(side<0?.17:.24));
+      paint(ctx,'M-10 0Q-16-14-13-36Q-10-63 0-60Q14-58 12-37Q13-15 10 0Z',color,LINE,3.4,ink,rest);
+      oval(ctx,0,-34,5,17,trim,null,0,ink,rest);
       ctx.restore();
     }
-    paint(ctx,'M74 79Q75 49 120 46Q164 47 167 77Q155 88 120 88Q91 87 74 79Z',color);
+    paint(ctx,'M74 79Q75 49 120 46Q164 47 167 77Q155 88 120 88Q91 87 74 79Z',color,LINE,3.4,ink);
     line(ctx,'M79 76Q119 86 161 76',trim,4.6);
     oval(ctx,114,69,1.6,2,LINE);
     oval(ctx,125,69,1.6,2,LINE);
     paint(ctx,'M117 74Q120 71 123 74L120 77Z',trim,LINE,1.3);
   } else if(id==='bearhat') {
     for(const x of [86,155]) {
-      oval(ctx,x,50,12,12,color,LINE);
-      oval(ctx,x,50,5.6,5.6,trim);
+      oval(ctx,x,50,12,12,color,LINE,3,ink);
+      oval(ctx,x,50,5.6,5.6,trim,null,0,ink);
     }
-    paint(ctx,'M73 80Q71 51 119 45Q164 47 170 79Q150 88 121 88Q91 87 73 80Z',color);
-    bearFace(ctx,121,70,color,trim);
+    paint(ctx,'M73 80Q71 51 119 45Q164 47 170 79Q150 88 121 88Q91 87 73 80Z',color,LINE,3.4,ink);
+    bearFace(ctx,121,70,color,trim,ink);
   } else {
-    paint(ctx,'M75 76V65Q78 32 118 31Q156 29 166 66V77Q135 89 75 76Z',color);
-    paint(ctx,'M74 66Q120 75 166 65L169 79Q119 92 72 79Z',trim);
-    oval(ctx,118,27,13,11,trim,LINE);
+    paint(ctx,'M75 76V65Q78 32 118 31Q156 29 166 66V77Q135 89 75 76Z',color,LINE,3.4,ink);
+    paint(ctx,'M74 66Q120 75 166 65L169 79Q119 92 72 79Z',trim,LINE,3.4,ink);
+    oval(ctx,118,27,13,11,trim,LINE,3,ink);
     line(ctx,'M105 40Q97 51 98 67M129 40Q136 49 139 69',trim,2);
   }
 }
 
-function drawNecklace(ctx,piece) {
+function drawNecklace(ctx,piece,ink) {
   if (!piece) return;
   line(ctx,'M102 143Q106 161 120 170Q134 163 139 143',piece.trim,3.8);
-  if(piece.id==='star') star(ctx,120,172,10,piece.color);
-  else if(piece.id==='heart') paint(ctx,'M120 183Q101 170 111 165Q117 161 120 169Q124 161 129 165Q138 170 120 183Z',piece.color,LINE,2.1);
+  paintMarks(ctx,'M100 143L104 142Q108 159 120 168Q132 162 137 142L141 143Q136 165 120 172Q104 162 100 143Z',ink);
+  if(piece.id==='star') star(ctx,120,172,10,piece.color,ink);
+  else if(piece.id==='heart') paint(ctx,'M120 183Q101 170 111 165Q117 161 120 169Q124 161 129 165Q138 170 120 183Z',piece.color,LINE,2.1,ink);
   else if(piece.id==='cloudbell') {
-    cloud(ctx,120,171,piece.color);
-    oval(ctx,120,182,2.6,3,'#ffcd62',LINE,1.4);
+    cloud(ctx,120,171,piece.color,ink);
+    oval(ctx,120,182,2.6,3,'#ffcd62',LINE,1.4,ink);
   } else if(piece.id==='fishneck') {
-    paint(ctx,'M125 171L132 164V180L124 175Q116 184 106 174Q115 163 125 171Z',piece.color,LINE,2.1);
+    paint(ctx,'M125 171L132 164V180L124 175Q116 184 106 174Q115 163 125 171Z',piece.color,LINE,2.1,ink);
     oval(ctx,112,172,1.5,1.5,LINE);
-  } else paint(ctx,'M114 179Q105 167 130 164Q133 180 114 179Z',piece.color,LINE,2.2);
+  } else paint(ctx,'M114 179Q105 167 130 164Q133 180 114 179Z',piece.color,LINE,2.2,ink);
   oval(ctx,119,169,2.4,2.4,WHITE);
 }
 
-function drawWings(ctx,piece,flap) {
+function drawWings(ctx,piece,flap,ink) {
   ctx.save();
   ctx.translate(120,179);
   for(const side of [-1,1]) {
     ctx.save();
     ctx.scale(side,1);
     ctx.rotate(-.09 + flap*.22);
-    paint(ctx,'M18 15Q22-13 43-24Q60-32 82-39Q90-37 87-26Q82-13 67-6Q82-12 80 1Q77 14 60 19Q70 16 68 26Q51 49 22 36Z',piece.color);
+    const rest = [120,179,-.09,side];
+    paint(ctx,'M18 15Q22-13 43-24Q60-32 82-39Q90-37 87-26Q82-13 67-6Q82-12 80 1Q77 14 60 19Q70 16 68 26Q51 49 22 36Z',piece.color,LINE,3.4,ink,rest);
     line(ctx,'M33 16Q49-2 66-6M35 25Q52 17 61 20M36 32Q49 28 55 28',piece.trim,2.9);
     star(ctx,58,-11,5,'#ffda87');
     ctx.restore();
   }
-  rect(ctx,-21,-14,43,54,16,piece.trim);
+  rect(ctx,-21,-14,43,54,16,piece.trim,LINE,ink,[120,179,0]);
   line(ctx,'M-7-15Q-6-28 7-24Q13-22 13-13',LINE,3.3);
   ctx.restore();
 }
 
-function drawPack(ctx,piece,swing=0,flap=0) {
+function drawPack(ctx,piece,swing=0,flap=0,ink) {
   if (!piece) return;
   if(piece.id==='wingpack') {
-    drawWings(ctx,piece,flap);
+    drawWings(ctx,piece,flap,ink);
     return;
   }
   ctx.save();
   ctx.translate(153,158);
   ctx.rotate(swing * .4);
-  paint(ctx,'M-20 10Q-22-9 0-12Q27-14 33 14V39Q31 52 14 51H-13Q-25 47-23 35Z',piece.color);
+  const rest = [153,158,0];
+  paint(ctx,'M-20 10Q-22-9 0-12Q27-14 33 14V39Q31 52 14 51H-13Q-25 47-23 35Z',piece.color,LINE,3.4,ink,rest);
   line(ctx,'M1-11Q0-23 14-21Q21-20 20-11',LINE,4);
-  rect(ctx,7,19,25,24,7,piece.trim);
+  rect(ctx,7,19,25,24,7,piece.trim,LINE,ink,rest);
   line(ctx,'M10 27H27',LINE,2.3);
   if(piece.id==='space') star(ctx,21,34,5,'#ffed93');
   if(piece.id==='berries') for(const [x,y] of [[10,4],[17,8],[25,2]]) oval(ctx,x,y,1.7,2.2,WHITE);
@@ -385,23 +388,25 @@ function drawPack(ctx,piece,swing=0,flap=0) {
   ctx.restore();
 }
 
-function drawSling(ctx,piece,swing) {
+function drawSling(ctx,piece,swing=0,ink) {
   if (!piece) return;
   ctx.save();
   ctx.translate(99,151);
   ctx.rotate(swing);
   line(ctx,'M0 0Q20 22 54 55',LINE,7.2);
   line(ctx,'M0 0Q20 22 54 55',piece.trim,3.6);
+  paintMarks(ctx,'M-1 1Q19 23 53 56L55 54Q22 21 1-1Z',ink,[99,151,0]);
   ctx.translate(55,55);
-  if(piece.id==='cloud') paint(ctx,'M-17 12Q-22-1-11-4Q-9-15 1-10Q8-16 13-5Q25-4 21 12Q13 21-10 18Z',piece.color);
+  const rest = [154,206,0];
+  if(piece.id==='cloud') paint(ctx,'M-17 12Q-22-1-11-4Q-9-15 1-10Q8-16 13-5Q25-4 21 12Q13 21-10 18Z',piece.color,LINE,3.4,ink,rest);
   else if(piece.id==='apple') {
-    paint(ctx,'M0-5Q-17-15-21 2Q-24 20-4 21Q0 19 4 21Q23 19 22 3Q20-15 0-5Z',piece.color);
-    paint(ctx,'M0-6Q0-17 14-15Q14-6 0-6Z',piece.trim,LINE,2.2);
+    paint(ctx,'M0-5Q-17-15-21 2Q-24 20-4 21Q0 19 4 21Q23 19 22 3Q20-15 0-5Z',piece.color,LINE,3.4,ink,rest);
+    paint(ctx,'M0-6Q0-17 14-15Q14-6 0-6Z',piece.trim,LINE,2.2,ink,rest);
   } else if(piece.id==='carrotsling') {
-    paint(ctx,'M-14-8Q-7-15 14-13Q28-10 19 2L-6 28Q-16 36-19 24Z',piece.color);
-    paint(ctx,'M5-13Q-12-20-7-26Q-2-29 7-17Q7-34 16-30Q24-29 16-16Q32-24 34-16Q33-9 17-10Z',piece.trim,LINE,2.5);
+    paint(ctx,'M-14-8Q-7-15 14-13Q28-10 19 2L-6 28Q-16 36-19 24Z',piece.color,LINE,3.4,ink,rest);
+    paint(ctx,'M5-13Q-12-20-7-26Q-2-29 7-17Q7-34 16-30Q24-29 16-16Q32-24 34-16Q33-9 17-10Z',piece.trim,LINE,2.5,ink,rest);
     line(ctx,'M-12 10l7 3M-3-2l8 4M-6 19l5 2','#cf7e67',2.3);
-  } else paint(ctx,'M10-16Q4-1 21 5Q20 23 1 22Q-17 22-20 5Q-22-12-4-16Z',piece.color);
+  } else paint(ctx,'M10-16Q4-1 21 5Q20 23 1 22Q-17 22-20 5Q-22-12-4-16Z',piece.color,LINE,3.4,ink,rest);
   if(piece.id!=='carrotsling') line(ctx,'M-11 8Q1 12 13 7',piece.id==='cloud'?'#79acca':WHITE,2.8);
   ctx.restore();
 }
@@ -452,8 +457,7 @@ function arm(ctx,x,y,angle,top,person,glove,ink) {
   paint(ctx,sleeve,top?.color ?? (person==='girl'?'#b7a7e2':'#88c6b7'),null);
   paintMarks(ctx,sleeve,ink,origin);
   line(ctx,sleeve);
-  drawGlove(ctx,0,46,glove);
-  if (!glove) paintMarks(ctx,'M-9 46a9 10 0 1 0 18 0a9 10 0 1 0-18 0Z',ink,origin);
+  drawGlove(ctx,0,46,glove,ink,origin);
   ctx.restore();
 }
 
@@ -476,21 +480,21 @@ export function drawAvatar(ctx, person, equipped, ink, pose = {}) {
   }
   ctx.save();
   ctx.translate(0,crouch*7);
-  if(bag?.style==='back') drawPack(ctx,bag,bagSwing,flap);
+  if(bag?.style==='back') drawPack(ctx,bag,bagSwing,flap,ink);
   arm(ctx,88,151,.28 - stride*.52 + climb*(1.45 + .68*stride) + glide*.96,top,person,gloves,ink);
   arm(ctx,152,151,-.28 + stride*.52 - climb*(1.45 - .68*stride) - Math.max(glide*.96,wave*(2.1+.3*stride)),top,person,gloves,ink);
   paint(ctx,'M112 121H132V140Q123 147 112 140Z',SKIN);
   drawTop(ctx,top,person,ink);
   drawSuspenders(ctx,pants,ink);
-  drawCape(ctx,top,bagSwing,Boolean(worn('neck')));
-  drawNecklace(ctx,worn('neck'));
-  if(bag?.style==='sling') drawSling(ctx,bag,bagSwing);
+  drawCape(ctx,top,bagSwing,Boolean(worn('neck')),ink);
+  drawNecklace(ctx,worn('neck'),ink);
+  if(bag?.style==='sling') drawSling(ctx,bag,bagSwing,ink);
   ctx.save();
   ctx.translate(121,133);
   ctx.rotate(headTilt);
   ctx.translate(-121,-133);
   drawHead(ctx,person,ink,blink);
-  drawHat(ctx,worn('hat'),earBounce);
+  drawHat(ctx,worn('hat'),earBounce,ink);
   ctx.restore();
   ctx.restore();
 }
