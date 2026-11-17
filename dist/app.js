@@ -38,7 +38,7 @@ $('#storage-warning').onclick=()=>{finish();$('#parent-dialog').showModal()};
 function save(){clearTimeout(saving);try{localStorage.setItem(KEY,JSON.stringify(state));saveFailed=false;$('#storage-warning').hidden=true;$('#save-status').textContent='✓ 已暫存在這台裝置'}catch{saveFailed=true;storageWarning('暫存空間不足，請大人儲存圖片。')}}
 function changed(){dirty=true;render();rewards?.stop();rewards?.sync();clearTimeout(saving);saving=setTimeout(save,300)}
 function finish(){if(pointer===null)return;const id=pointer;pointer=null;if(canvas.hasPointerCapture(id))canvas.releasePointerCapture(id);if(active?.points.length){state.strokes.push(active);history.push({kind:'stroke',stroke:active});redo=[]}active=null;changed()}
-function setPattern(id){finish();state={version:1,pattern:id,background:backgroundColor(state),fillMode:state.fillMode===true,strokes:[],rewardCollection:state.rewardCollection,rewardCollectionBackup:state.rewardCollectionBackup};history=[];redo=[];$('#outline').innerHTML=outlineMarkup(id);syncTool();requestAnimationFrame(fit);const p=patterns.find(p=>p.id===id);$('#picture-title').textContent=p.icon+' '+p.name;document.querySelectorAll('.pattern').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===id)));filterPatterns();changed()}
+function setPattern(id){finish();avatar?.showDrawing();state={version:1,pattern:id,background:backgroundColor(state),fillMode:state.fillMode===true,strokes:[],rewardCollection:state.rewardCollection,rewardCollectionBackup:state.rewardCollectionBackup};history=[];redo=[];$('#outline').innerHTML=outlineMarkup(id);syncTool();requestAnimationFrame(fit);const p=patterns.find(p=>p.id===id);$('#picture-title').textContent=p.icon+' '+p.name;document.querySelectorAll('.pattern').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===id)));filterPatterns();changed()}
 function ask(title,message,fn,target=state.pattern){finish();const preview=$('#confirm-preview');preview.replaceChildren();const before=document.createElement('div');before.className='confirm-sheet';before.style.background=backgroundColor(state);if(typeof canvas.toDataURL==='function'){const image=document.createElement('img');image.src=canvas.toDataURL('image/png');image.alt='';before.append(image)}const lines=document.createElement('div');lines.innerHTML=paperMarkup(outlineMarkup(state.pattern),view);before.style.aspectRatio=String(view.width/view.height);before.append(lines);const arrow=document.createElement('span');arrow.textContent='→';const after=document.createElement('div');after.className='confirm-sheet';after.style.background=backgroundColor(state);after.innerHTML=outlineMarkup(target);preview.append(before,arrow,after);confirmAction=fn;$('#confirm-title').textContent=title;$('#confirm-message').textContent=message;$('#confirm-dialog').showModal()}
 const brushPicker = $('#brush-picker');
 const stampOptions = $('#stamp-options');
@@ -98,14 +98,38 @@ for(const [n,label,px]of [[9,'細筆',5],[20,'中筆',10],[38,'粗筆',17]]){con
 let patternCategory='all';
 function filterPatterns(){document.querySelectorAll('.pattern').forEach(b=>{b.hidden=(b.dataset.legacy==='true'&&b.dataset.id!==state.pattern)||(patternCategory!=='all'&&b.dataset.category!==patternCategory)});document.querySelectorAll('.category-choice').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===patternCategory)));requestAnimationFrame(fit)}
 for(const c of [{id:'all',name:'全部',icon:'✨'},...patternCategories]){const b=document.createElement('button');b.className='category-choice';b.dataset.id=c.id;b.textContent=c.icon;b.title=c.name+'圖案';b.setAttribute('aria-label',c.name+'圖案');b.setAttribute('aria-pressed',String(c.id==='all'));b.onclick=()=>{finish();patternCategory=c.id;filterPatterns()};$('#pattern-categories').append(b)}
-for(const p of availablePatterns(state.pattern)){const b=document.createElement('button');const legacy=isLegacyPattern(p.id);const caption=legacy?p.name+'（舊稿）':p.name;b.className='pattern';b.dataset.id=p.id;b.dataset.category=p.category;b.dataset.legacy=String(legacy);b.setAttribute('aria-pressed',String(p.id===state.pattern));b.innerHTML=(p.id==='blank'?'<span class="blank-icon">✨</span>':outlineMarkup(p.id))+`<span class="${legacy?'legacy-caption':'sr-only'}">${legacy?'舊稿':p.name}</span>`;b.setAttribute('aria-label',caption+'畫紙');b.title=caption;b.onclick=()=>{$('#pattern-dialog').close();if(p.id===state.pattern)return;if(state.strokes.length||state.fills?.length||active)ask('換一張圖案嗎？','這張畫會被換掉。喜歡的作品，先請大人幫忙存成圖片。',()=>setPattern(p.id),p.id);else setPattern(p.id)};$('#patterns').append(b)}
+for(const p of availablePatterns(state.pattern)){const b=document.createElement('button');const legacy=isLegacyPattern(p.id);const caption=legacy?p.name+'（舊稿）':p.name;b.className='pattern';b.dataset.id=p.id;b.dataset.category=p.category;b.dataset.legacy=String(legacy);b.setAttribute('aria-pressed',String(p.id===state.pattern));b.innerHTML=(p.id==='blank'?'<span class="blank-icon">✨</span>':outlineMarkup(p.id))+`<span class="${legacy?'legacy-caption':'sr-only'}">${legacy?'舊稿':p.name}</span>`;b.setAttribute('aria-label',caption+'畫紙');b.title=caption;b.onclick=()=>{
+  $('#pattern-dialog').close();
+  if(p.id===state.pattern){avatar?.showDrawing();return}
+  if(state.strokes.length||state.fills?.length||active)ask('換一張圖案嗎？','這張畫會被換掉。喜歡的作品，先請大人幫忙存成圖片。',()=>setPattern(p.id),p.id);
+  else setPattern(p.id);
+};$('#patterns').append(b)}
 canvas.addEventListener('pointerdown',e=>{if(pointer!==null||!e.isPrimary||(e.pointerType==='mouse'&&e.button!==0))return;e.preventDefault();if(state.fillMode){const point=pointAt(e.clientX,e.clientY,canvas.getBoundingClientRect());fillAt(point);return}if(state.strokes.length>=MAX_STROKES||state.strokes.reduce((n,s)=>n+s.points.length,0)>=MAX_POINTS-15000){storageWarning('這張畫很豐富了！請大人儲存，再開新畫。');return}pointer=e.pointerId;canvas.setPointerCapture(pointer);active={tool,color,rainbow:tool!=='eraser'&&rainbow,size,stamp:stampShape,seed:crypto.getRandomValues(new Uint32Array(1))[0],points:[pointAt(e.clientX,e.clientY,canvas.getBoundingClientRect())]};rememberPoint(active.points[0]);schedule()});
 canvas.addEventListener('pointermove',e=>{if(e.pointerId!==pointer||!active)return;e.preventDefault();const rect=canvas.getBoundingClientRect();const events=e.getCoalescedEvents?.();for(const ev of events?.length?events:[e]){const p=pointAt(ev.clientX,ev.clientY,rect),last=active.points.at(-1);if(Math.hypot(p.x-last.x,p.y-last.y)>1.3&&active.points.length<14999){active.points.push(p);rememberPoint(p)}}schedule()});
 for(const event of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(event,e=>{if(e.pointerId===pointer)finish()});
 window.addEventListener('blur',finish);window.addEventListener('pagehide',()=>{finish();save()});document.addEventListener('visibilitychange',()=>{if(document.hidden){finish();save()}});window.addEventListener('resize',finish);
 $('#undo').onclick=()=>{finish();const a=history.pop();if(a){if(a.kind==='stroke')state.strokes.pop();else restoreFill(a.region,a.before);redo.push(a)}changed()};$('#redo').onclick=()=>{finish();const a=redo.pop();if(a){if(a.kind==='stroke')state.strokes.push(a.stroke);else restoreFill(a.region,a.after);history.push(a)}changed()};
-$('#parent').onclick=()=>{finish();$('#parent-dialog').showModal()};$('[data-close]').onclick=()=>$('#parent-dialog').close();$('#cancel').onclick=()=>{$('#confirm-dialog').close();confirmAction=null};$('#confirm').onclick=()=>{const action=confirmAction;confirmAction=null;$('#confirm-dialog').close();action?.()};$('#confirm-dialog').addEventListener('cancel',()=>confirmAction=null);
-$('#clear').onclick=()=>{$('#parent-dialog').close();ask('換一張乾淨的紙嗎？','現在的顏色會清掉，圖案保留。請先儲存想留下的作品。',()=>setPattern(state.pattern))};
+$('#parent').onclick=()=>{finish();avatar?.pauseEditor();$('#parent-dialog').showModal()};$('[data-close]').onclick=()=>$('#parent-dialog').close();$('#cancel').onclick=()=>{$('#confirm-dialog').close();confirmAction=null};$('#confirm').onclick=()=>{const action=confirmAction;confirmAction=null;$('#confirm-dialog').close();action?.()};$('#confirm-dialog').addEventListener('cancel',()=>confirmAction=null);
+$('#clear').onclick=()=>{
+  $('#parent-dialog').close();
+  if(!avatar?.editing){ask('換一張乾淨的紙嗎？','現在的顏色會清掉，圖案保留。請先儲存想留下的作品。',()=>setPattern(state.pattern));return}
+  const arrow = document.createElement('span');
+  arrow.textContent = '→';
+  const sheets = [false,true].map(blank => {
+    const sheet = document.createElement('div');
+    const image = document.createElement('img');
+    image.src = avatar.exportCanvas(blank).toDataURL();
+    image.alt = '';
+    sheet.className = 'confirm-sheet';
+    sheet.append(image);
+    return sheet;
+  });
+  $('#confirm-preview').replaceChildren(sheets[0],arrow,sheets[1]);
+  $('#confirm-title').textContent = '清除主角筆跡嗎？';
+  $('#confirm-message').textContent = '清除後可以重新畫在主角身上。';
+  confirmAction = () => avatar.clearMarks();
+  $('#confirm-dialog').showModal();
+};
 const nativeApp = window.Capacitor?.isNativePlatform();
 const exportButton = $('#export');
 const exportLabel = nativeApp ? '分享作品 PNG' : '↓ 儲存作品 PNG';
@@ -176,9 +200,8 @@ async function drawSvg(context, markup, area) {
 }
 
 async function createArtworkPng() {
-  const area = paperView(view.width, view.height, state.paper);
-  const markup = rewards ? rewardExportMarkup(state) : '';
-  const output = await drawArtwork(state, area, 4096, markup);
+  const output = avatar?.editing ? avatar.exportCanvas()
+    : await drawArtwork(state, paperView(view.width, view.height, state.paper), 4096, rewards ? rewardExportMarkup(state) : '');
   const png = await new Promise(resolve => output.toBlob(resolve, 'image/png'));
   if (!png) throw new Error('PNG encoding failed');
   return png;
@@ -297,6 +320,7 @@ document.addEventListener('keydown',event => {
 });
 $('#pattern-open').onclick = () => {
   finish();
+  avatar?.pauseEditor();
   $('#pattern-dialog').showModal();
 };
 $('#pattern-close').onclick = () => $('#pattern-dialog').close();
@@ -454,8 +478,23 @@ function fillAt(point) {
 }
 
 if (document.createElementNS) {
-  if (nativeApp) avatar = createGameAvatar({board, refit: fit});
-  rewards = createRewards({board, ink: canvas, getState: () => state, canCelebrate: () => pointer === null, motionArtwork, save, avatar});
+  if (nativeApp) {
+    app.classList.add('is-native');
+    avatar = createGameAvatar({board, getPattern: () => state.pattern, onEditorChange(editing) {
+      finish();
+      if (editing) rewards.stop(true);
+      app.classList.toggle('avatar-editing',editing);
+      board.inert = editing;
+      $('.toolbar-paint').hidden = editing;
+      for (const id of ['avatar-tools','avatar-open','avatar-undo']) $(`#${id}`).hidden = !editing;
+      for (const id of ['undo','redo','reward-open']) $(`#${id}`).hidden = editing;
+      document.querySelectorAll('.pattern').forEach(b=>b.setAttribute('aria-pressed',String(!editing && b.dataset.id===state.pattern)));
+      fit();
+      rewards.sync();
+    }});
+  }
+  rewards = createRewards({board, ink: canvas, getState: () => state, canCelebrate: () => pointer === null && !avatar?.editing, motionArtwork, save, avatar});
   rewards.resize(view);
   rewards.sync();
+  avatar?.start();
 }

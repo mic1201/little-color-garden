@@ -145,10 +145,15 @@ function bearFace(ctx,x,y,color,trim) {
   oval(ctx,x,y+1,1.5,1.1,LINE);
 }
 
-function paintMarks(ctx,d,ink) {
+function paintMarks(ctx,d,ink,armOrigin) {
   if (!ink) return;
   ctx.save();
   ctx.clip(shape(d));
+  if (armOrigin) {
+    const [x,y,angle] = armOrigin;
+    ctx.rotate(-angle);
+    ctx.translate(-x,-y);
+  }
   ctx.drawImage(ink,0,0,AVATAR_W,AVATAR_H);
   ctx.restore();
 }
@@ -236,11 +241,14 @@ function drawSuspenders(ctx,pants,ink) {
   line(ctx,bib,LINE,2.6);
 }
 
-function drawShoe(ctx,x,y,piece) {
+function drawShoe(ctx,x,y,piece,ink) {
   const fill = piece?.color ?? '#f8efd8';
   const trim = piece?.trim ?? '#e4c29b';
   const upper = piece?.id==='boot' ? 19 : 9;
-  paint(ctx,`M${x-10} ${y-upper}Q${x} ${y-upper-4} ${x+7} ${y-upper}L${x+9} ${y-4}Q${x+23} ${y-6} ${x+25} ${y+3}Q${x+25} ${y+11} ${x+16} ${y+11}H${x-11}Z`,fill);
+  const shape = `M${x-10} ${y-upper}Q${x} ${y-upper-4} ${x+7} ${y-upper}L${x+9} ${y-4}Q${x+23} ${y-6} ${x+25} ${y+3}Q${x+25} ${y+11} ${x+16} ${y+11}H${x-11}Z`;
+  paint(ctx,shape,fill,null);
+  paintMarks(ctx,shape,ink);
+  line(ctx,shape);
   line(ctx,`M${x-9} ${y+5}H${x+21}`,trim,3.6);
   if (piece?.id==='sneaker') line(ctx,`M${x+1} ${y-6}H${x+9}M${x+3} ${y-2}H${x+12}`,WHITE,2.5);
   if (piece?.id==='spring') line(ctx,`M${x-4} ${y}l5-7 5 7 5-7 `,trim,2.7);
@@ -416,7 +424,9 @@ function drawHead(ctx,person,ink,blink) {
   paint(ctx,facePath,SKIN,null);
   paintMarks(ctx,facePath,ink);
   line(ctx,facePath);
-  paint(ctx,hair,HAIR);
+  paint(ctx,hair,HAIR,null);
+  paintMarks(ctx,hair,ink);
+  line(ctx,hair);
   if(person==='girl') line(ctx,'M145 59L154 64','#f5c87b',4);
   const eyeHeight=blink ? 1.2 : 4.3;
   oval(ctx,104,94,3.7,eyeHeight,LINE);
@@ -426,13 +436,21 @@ function drawHead(ctx,person,ink,blink) {
   line(ctx,'M115 111Q122 119 130 111',LINE,2.4);
 }
 
-function arm(ctx,x,y,angle,top,person,glove) {
+function arm(ctx,x,y,angle,top,person,glove,ink) {
   ctx.save();
   ctx.translate(x,y);
   ctx.rotate(angle);
-  paint(ctx,'M-7 12Q-9 21-8 33Q-7 43-6 45Q0 51 7 44Q9 36 8 29Q9 19 7 12Z',SKIN);
-  paint(ctx,'M-10 4Q-10-5 0-5Q10-5 10 4L10 12Q9 15 6 16Q-1 18-10 14Z',top?.color ?? (person==='girl'?'#b7a7e2':'#88c6b7'));
+  const armPath = 'M-7 12Q-9 21-8 33Q-7 43-6 45Q0 51 7 44Q9 36 8 29Q9 19 7 12Z';
+  const sleeve = 'M-10 4Q-10-5 0-5Q10-5 10 4L10 12Q9 15 6 16Q-1 18-10 14Z';
+  const origin = [x,y,x<120 ? .28 : -.28];
+  paint(ctx,armPath,SKIN,null);
+  paintMarks(ctx,armPath,ink,origin);
+  line(ctx,armPath);
+  paint(ctx,sleeve,top?.color ?? (person==='girl'?'#b7a7e2':'#88c6b7'),null);
+  paintMarks(ctx,sleeve,ink,origin);
+  line(ctx,sleeve);
   drawGlove(ctx,0,46,glove);
+  if (!glove) paintMarks(ctx,'M-9 46a9 10 0 1 0 18 0a9 10 0 1 0-18 0Z',ink,origin);
   ctx.restore();
 }
 
@@ -445,16 +463,19 @@ export function drawAvatar(ctx, person, equipped, ink, pose = {}) {
     ctx.translate(x,207);
     ctx.rotate(side*stride*.68);
     ctx.translate(-x,-207);
-    paint(ctx,`M${x-9} 220H${x+9}V269H${x-9}Z`,SKIN);
+    const leg = `M${x-9} 220H${x+9}V269H${x-9}Z`;
+    paint(ctx,leg,SKIN,null);
+    paintMarks(ctx,leg,ink);
+    line(ctx,leg);
     drawPantsLeg(ctx,x,205,pants,person,ink);
-    drawShoe(ctx,x,269,shoes);
+    drawShoe(ctx,x,269,shoes,ink);
     ctx.restore();
   }
   ctx.save();
   ctx.translate(0,crouch*7);
   if(bag?.style==='back') drawPack(ctx,bag,bagSwing,flap);
-  arm(ctx,88,151,.28 - stride*.52 + climb*(1.45 + .68*stride) + glide*.96,top,person,gloves);
-  arm(ctx,152,151,-.28 + stride*.52 - climb*(1.45 - .68*stride) - Math.max(glide*.96,wave*(2.1+.3*stride)),top,person,gloves);
+  arm(ctx,88,151,.28 - stride*.52 + climb*(1.45 + .68*stride) + glide*.96,top,person,gloves,ink);
+  arm(ctx,152,151,-.28 + stride*.52 - climb*(1.45 - .68*stride) - Math.max(glide*.96,wave*(2.1+.3*stride)),top,person,gloves,ink);
   paint(ctx,'M112 121H132V140Q123 147 112 140Z',SKIN);
   drawTop(ctx,top,person,ink);
   drawSuspenders(ctx,pants,ink);

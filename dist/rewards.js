@@ -229,9 +229,13 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     }
   }
 
-  function stop() {
+  function stop(closeTray = false) {
     generation++;
     cancelAnimationFrame(frame);
+    if (closeTray) {
+      cancelDrag();
+      setTrayOpen(false);
+    }
     board.removeAttribute('data-celebrating');
     updatePlayback(false);
     motionLayer.hidden = true;

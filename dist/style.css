@@ -511,28 +511,21 @@ p { line-height: 1.62; }
 }
 .reward-item[data-arriving] { opacity: 0; pointer-events: none; }
 
-.paper-frame.has-avatar {
-  --avatar-gutter: clamp(38px, 9vmin, 53px);
-  position: relative;
-  padding: var(--avatar-gutter);
-  background: #e7eddd;
-}
-.has-avatar .board {
-  border-radius: 10px;
-  box-shadow: 0 0 0 1px #82927b55, 0 3px 0 #82927b38;
-}
-#avatar-track {
+.app.is-native .paper-frame { position: relative; border-radius: 0; box-shadow: none; }
+#avatar-track, #avatar-portrait {
   position: absolute;
   inset: 0;
-  z-index: 1;
   width: 100%;
   height: 100%;
-  pointer-events: none;
 }
-.toolbar-actions:has(#avatar-open:not([hidden])) { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+#avatar-track { z-index: 1; pointer-events: none; }
+#avatar-portrait { cursor: crosshair; touch-action: none; }
+.avatar-editing .board { visibility: hidden; }
+.avatar-editing #avatar-tools { grid-template-columns: repeat(2, minmax(44px, 1fr)); }
+.avatar-editing .toolbar-actions { grid-template-columns: repeat(3, minmax(44px, 1fr)); }
 #avatar-open { position: relative; background: #e8efe1; }
-#avatar-open canvas { width: 30px; height: 30px; pointer-events: none; }
-#avatar-open[data-new]::after {
+#pattern-open, #avatar-pattern { position: relative; }
+#pattern-open[data-new-avatar]::after, #avatar-pattern[data-new]::after, #avatar-open[data-new]::after {
   content: '';
   position: absolute;
   top: 6px;
@@ -542,32 +535,60 @@ p { line-height: 1.62; }
   border-radius: 50%;
   background: #a94c81;
 }
-.avatar-portrait {
+#avatar-pattern {
   display: grid;
-  justify-items: center;
-  gap: 7px;
-  padding: 6px 8px 8px;
+  place-items: center;
+  align-content: center;
+  min-height: 96px;
+  min-width: 0;
+  padding: 4px;
+  border: 2px solid #dce6d8;
   border-radius: 15px;
-  background: #f1ebf7;
+  background: #f0f6ec;
+  font-size: 13px;
 }
-#avatar-portrait { display: block; width: auto; max-width: 100%; height: clamp(136px, 28dvh, 232px); touch-action: none; }
-#avatar-colors { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
-#avatar-colors button, #avatar-slots button {
+#avatar-pattern[aria-pressed="true"] { border-color: var(--selected); }
+#avatar-pattern canvas { width: 58px; height: 58px; }
+#avatar-current-color {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #586e6070;
+  border-radius: 50%;
+}
+#avatar-colors, #avatar-color-targets { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+#avatar-color-targets { margin-bottom: 9px; }
+#avatar-colors button, #avatar-color-targets button, #avatar-slots button {
   display: grid;
   place-items: center;
   min-height: 44px;
   min-width: 44px;
-  padding: 0;
-  border: 1px solid transparent;
+  padding: 0 6px;
+  border: 1px solid #eaddc8;
   border-radius: 11px;
   background: #fffdf9;
 }
-#avatar-colors button[aria-pressed="true"], #avatar-slots button[aria-pressed="true"], #avatar-items button[aria-pressed="true"] {
+#avatar-colors button[aria-pressed="true"], #avatar-color-targets button[aria-pressed="true"], #avatar-slots button[aria-pressed="true"], #avatar-items button[aria-pressed="true"] {
   border-color: var(--selected);
   background: #e7eee2;
 }
 #avatar-colors span { width: 25px; height: 25px; border: 1px solid #35444a30; border-radius: 50%; background: var(--avatar-color); }
-#avatar-undo { font-size: 23px; }
+
+@media (orientation: landscape) {
+  .app.is-native {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .app.is-native .drawing-toolbar { width: 154px; grid-template-columns: minmax(0, 1fr); align-self: center; }
+  .app.is-native .toolbar-paint { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app.is-native .toolbar-actions,
+  .app.is-native .toolbar-actions:has(#reward-open:not([hidden])) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .app.is-native .sizes { grid-column: 1 / -1; }
+  .app.is-native .reward-tray {
+    inset: auto calc(100% + 8px) 0 auto;
+    width: min(290px, 50vw);
+  }
+}
+
 .avatar-wardrobe-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 9px 0 3px; }
 .avatar-wardrobe-header h3 { margin: 0; font-size: 17px; }
 #avatar-change { min-height: 44px; padding-inline: 10px; border: 1px solid var(--tool-border); border-radius: 11px; background: #f4f0e7; }

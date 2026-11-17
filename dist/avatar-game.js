@@ -1,11 +1,14 @@
 import {AVATAR_W, AVATAR_H, drawAvatar, drawWardrobeItem, itemById, makeAvatarInk, restoreOutfit, wardrobe} from './avatar-art.js';
 import {drawActor, enterDuration, frame, insidePose, patrolPose, sceneById, stageToPicture} from './avatar-stage.js';
 import {ORIGINAL_PAPER} from './paper.js';
+import {getFillRegions} from './fill-regions.js';
 import {transformSticker} from './reward-motion.js';
 
 const KEY = 'little-color-garden-avatar-v1';
+const IDLE_DELAY = 3000;
+const DEFAULT_BACKGROUND = '#fff8eb';
 const people = ['boy', 'girl'];
-const colors = [['莓果紅','#ef7790'], ['芒果黃','#edb247'], ['薄荷綠','#4faf85'], ['海水藍','#4b9dc6'], ['芋頭紫','#9873cf']];
+const colors = [['莓果紅','#ef7790'], ['芒果黃','#edb247'], ['薄荷綠','#4faf85'], ['海水藍','#4b9dc6'], ['芋頭紫','#9873cf'], ['奶油白',DEFAULT_BACKGROUND]];
 const limit = (n, min, max) => Math.max(min, Math.min(n, max));
 const mix = (a, b, u) => a + (b - a) * u;
 const lerpRange = (n, start, end, a, b) => mix(a, b, limit((n - start) / (end - start), 0, 1));
@@ -20,23 +23,41 @@ export function restoreAvatar(saved) {
       stroke.points.every(p => p && Number.isFinite(p.x) && Number.isFinite(p.y) &&
         p.x >= 0 && p.x <= AVATAR_W && p.y >= 0 && p.y <= AVATAR_H)
     ) : [];
-    return [id, {equipped: restoreOutfit(profile?.equipped), strokes}];
+    const background = typeof profile?.background === 'string' && /^#[0-9a-f]{6}$/i.test(profile.background)
+      ? profile.background : DEFAULT_BACKGROUND;
+    return [id, {equipped: restoreOutfit(profile?.equipped), strokes, background}];
   }));
-  return {person, profiles};
+  return {person, profiles, editorOpen: Boolean(person && saved?.editorOpen !== false)};
+}
+
+export function avatarBoundaries(pattern, area, {width, height}) {
+  const regions = getFillRegions(pattern);
+  const bounds = regions.length
+    ? regions.reduce(([left, top, right, bottom], {bounds: [x1, y1, x2, y2]}) =>
+      [Math.min(left,x1), Math.min(top,y1), Math.max(right,x2), Math.max(bottom,y2)], [Infinity, Infinity, -Infinity, -Infinity])
+    : [240, 230, 760, 670];
+  const toX = x => (x - area.x) * width / area.width;
+  const toY = y => (y - area.y) * height / area.height;
+  const x = limit(toX(bounds[0]) - 5, 0, width);
+  const y = limit(toY(bounds[1]) - 5, 0, height);
+  return {x, y, width: limit(toX(bounds[2]) + 5, x, width) - x,
+    height: limit(toY(bounds[3]) + 5, y, height) - y};
 }
 
 function outsidePosition(pose, rect, extent) {
+  const size = (pose.size ?? .326) * limit(Math.min(extent.width, extent.height) / 930, .31, .53);
+  const half = size * 97;
+  const top = size * 284;
   const right = rect.x + rect.width;
   const edge = frame.x + frame.width;
-  let x = lerpRange(pose.x, frame.x, edge, rect.x, right);
-  if (pose.x < frame.x) x = lerpRange(pose.x, 79, frame.x, rect.x / 2, rect.x);
-  if (pose.x > edge) x = lerpRange(pose.x, edge, 881, right, (right + extent.width) / 2);
   const bottom = rect.y + rect.height;
-  const y = pose.y <= frame.y ? rect.y - 3
+  let x = lerpRange(pose.x, frame.x, edge, rect.x, right);
+  if (pose.x < frame.x) x = lerpRange(pose.x, 79, frame.x, rect.x - half - 5, rect.x);
+  if (pose.x > edge) x = lerpRange(pose.x, edge, 881, right, right + half + 5);
+  const y = pose.y <= frame.y ? rect.y - 5
     : lerpRange(pose.y, frame.y, frame.y + frame.height, rect.y, bottom) +
-      lerpRange(pose.y, frame.y + frame.height, 603, 0, extent.height - bottom - 4);
-  const size = (pose.size ?? .326) * Math.min(rect.x, rect.y) / 94;
-  return {...pose, x, y, size};
+      lerpRange(pose.y, frame.y + frame.height, 603, 0, top + 7);
+  return {...pose, x:limit(x, half, extent.width - half), y:limit(y, top, extent.height - 4), size};
 }
 
 function genericPose(part, t, gear) {
@@ -81,23 +102,25 @@ function itemIcon(piece, size = 72) {
   return canvas;
 }
 
-export function createGameAvatar({board, refit}) {
+export function createGameAvatar({board, getPattern, onEditorChange}) {
   const $ = selector => document.querySelector(selector);
   let stored;
   try { stored = JSON.parse(localStorage.getItem(KEY)); } catch { /* Start with a fresh character. */ }
   const state = restoreAvatar(stored);
   const track = $('#avatar-track');
   const ctx = track.getContext('2d');
-  const sheet = track.parentElement;
+  const patternButton = $('#pattern-open');
+  const tile = $('#avatar-pattern');
+  const icon = tile.querySelector('canvas').getContext('2d');
   const open = $('#avatar-open');
-  const icon = open.querySelector('canvas');
-  const iconContext = icon.getContext('2d');
   const closet = $('#avatar-closet');
   const chooser = $('#avatar-choose');
   const chooserClose = $('#avatar-choose-close');
+  const palette = $('#avatar-color-picker');
   const portrait = $('#avatar-portrait');
   const portraitContext = portrait.getContext('2d');
   const undo = $('#avatar-undo');
+  const tabs = $('#avatar-slots');
   const itemGrid = $('#avatar-items');
   const empty = $('#avatar-empty');
   const status = $('#reward-status');
@@ -109,19 +132,22 @@ export function createGameAvatar({board, refit}) {
   let collection = new Set();
   let category = wardrobe[0];
   let color = colors[0][1];
+  let colorTarget = 'brush';
   let pending;
   let pointer;
   let area = ORIGINAL_PAPER;
   let rect;
-  let extent;
+  let boundary;
   let ratio;
   let frameId = 0;
   let last;
   let elapsed = 0;
   let entry;
   let playing = false;
+  let editing = false;
   let gear = {};
-  let returnToCloset = false;
+  let idleTimer;
+  let idleStart;
 
   const profile = () => state.profiles[state.person];
   function save() {
@@ -129,15 +155,15 @@ export function createGameAvatar({board, refit}) {
     catch { status.textContent = '主角暫存空間不足，這次造型會先保留在畫面上。'; }
   }
 
-  function draw(pose, time, outside) {
+  function drawPatrol(pose, time, outside) {
     if (!state.person || !rect) return;
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    ctx.clearRect(0, 0, extent.width, extent.height);
+    ctx.clearRect(0, 0, rect.width, rect.height);
     ctx.save();
     if (outside) {
       ctx.beginPath();
-      ctx.rect(0, 0, extent.width, extent.height);
-      ctx.rect(rect.x, rect.y, rect.width, rect.height);
+      ctx.rect(0, 0, rect.width, rect.height);
+      ctx.rect(boundary.x, boundary.y, boundary.width, boundary.height);
       ctx.clip('evenodd');
     }
     drawActor(ctx, state.person, gear, ink, pose, time);
@@ -146,35 +172,100 @@ export function createGameAvatar({board, refit}) {
 
   function outsideFrame(now) {
     frameId = 0;
-    if (playing || document.hidden || closet.open || chooser.open || !rect) return;
+    if (editing || playing || document.hidden || chooser.open || !rect) return;
     if (last !== undefined && !reduced.matches) elapsed += Math.min(.06, (now - last) / 1000);
     last = now;
-    draw(outsidePosition(patrolPose(elapsed, gear), rect, extent), elapsed, true);
-    if (!reduced.matches) schedule();
+    drawPatrol(outsidePosition(patrolPose(elapsed, gear), boundary, rect), elapsed, true);
+    if (!reduced.matches) schedulePatrol();
   }
 
-  function schedule() {
-    if (!frameId && state.person && !playing && !document.hidden) frameId = requestAnimationFrame(outsideFrame);
+  function schedulePatrol() {
+    if (!frameId && state.person && !editing && !playing && !document.hidden) frameId = requestAnimationFrame(outsideFrame);
+  }
+
+  function portraitLayout() {
+    const scale = .82 * Math.min(rect.width / AVATAR_W, rect.height / AVATAR_H);
+    return {scale, x:(rect.width - AVATAR_W * scale) / 2, y:(rect.height - AVATAR_H * scale) / 2};
+  }
+
+  function paintPortrait(target, t, marks = ink) {
+    if (!rect || !state.person) return;
+    const {x, y, scale} = portraitLayout();
+    target.setTransform(ratio, 0, 0, ratio, 0, 0);
+    target.fillStyle = profile().background;
+    target.fillRect(0, 0, rect.width + 1, rect.height + 1);
+    if (t === undefined) {
+      target.setTransform(ratio * scale, 0, 0, ratio * scale, ratio * x, ratio * y);
+      drawAvatar(target, state.person, gear, marks);
+      return;
+    }
+    const wave = Math.sin(t * Math.PI * 2 / 4);
+    const wing = gear.bag === 'wingpack';
+    const rabbit = gear.hat === 'rabbit-ears';
+    const lift = Math.max(0, wave);
+    const ground = y + 280 * scale;
+    const bounce = (wing ? 44 : rabbit ? 27 : 10) * lift;
+    drawActor(target, state.person, gear, marks, {
+      x:x + 122 * scale + 24 * scale * wave,
+      y:ground - bounce * scale,
+      size:scale,
+      shadowY:ground,
+      wave:Math.max(0, -wave),
+      stride:.48 * wave,
+      airborne:wing ? lift : 0,
+      gait:wing ? 'flight' : 'hop'
+    }, t);
+  }
+
+  const readyToAnimate = () => editing && !pending && !document.hidden && !document.querySelector('dialog[open]');
+  function idleFrame(now) {
+    frameId = 0;
+    if (!readyToAnimate() || reduced.matches) {
+      cancelIdle();
+      return;
+    }
+    idleStart ??= now;
+    paintPortrait(portraitContext, (now - idleStart) / 1000);
+    frameId = requestAnimationFrame(idleFrame);
+  }
+
+  function cancelIdle() {
+    clearTimeout(idleTimer);
+    if (!editing) return;
+    cancelAnimationFrame(frameId);
+    frameId = 0;
+    idleStart = undefined;
+    portrait.setAttribute('aria-label', '主角畫布，用手指畫在主角身上');
+    paintPortrait(portraitContext);
+  }
+
+  function resetIdle() {
+    cancelIdle();
+    if (!readyToAnimate() || reduced.matches) return;
+    idleTimer = setTimeout(() => {
+      if (!readyToAnimate()) return;
+      portrait.setAttribute('aria-label', '主角正在動，碰一下畫布繼續作畫');
+      frameId = requestAnimationFrame(idleFrame);
+    }, IDLE_DELAY);
   }
 
   function updatePortrait() {
     if (!state.person) return;
     gear = Object.fromEntries(Object.entries(profile().equipped).filter(([, id]) => collection.has(id)));
     makeAvatarInk(ink, profile().strokes, pending);
-    portraitContext.setTransform(2, 0, 0, 2, 0, 0);
-    portraitContext.clearRect(0, 0, AVATAR_W, AVATAR_H);
-    drawAvatar(portraitContext, state.person, gear, ink);
     undo.disabled = profile().strokes.length === 0;
-    iconContext.setTransform(.40, 0, 0, .40, -20, -3);
-    iconContext.clearRect(50, 7.5, 140, 140);
-    drawAvatar(iconContext, state.person, gear, ink);
-    schedule();
+    icon.setTransform(1, 0, 0, 1, 0, 0);
+    icon.clearRect(0, 0, 76, 76);
+    icon.setTransform(.52, 0, 0, .52, -25, 4);
+    drawAvatar(icon, state.person, gear, ink);
+    if (editing) paintPortrait(portraitContext);
+    else schedulePatrol();
   }
 
   function renderCloset() {
     if (!state.person) return;
     const ids = category.items.filter(({id}) => collection.has(id));
-    for (const tab of $('#avatar-slots').children) {
+    for (const tab of tabs.children) {
       const group = wardrobe.find(entry => entry.slot === tab.dataset.slot);
       tab.setAttribute('aria-pressed', String(group === category));
       tab.toggleAttribute('data-owned', group.items.some(({id}) => collection.has(id)));
@@ -206,49 +297,75 @@ export function createGameAvatar({board, refit}) {
     button.setAttribute('aria-label', group.name);
     button.textContent = group.icon;
     button.onclick = () => { category = group; renderCloset(); };
-    $('#avatar-slots').append(button);
+    tabs.append(button);
   }
 
-  const swatches = colors.map(([name, tone]) => {
+  const colorTargets = [...$('#avatar-color-targets').children];
+  function renderPalette() {
+    const selected = colorTarget === 'background' ? profile().background : color;
+    for (const button of colorTargets) {
+      button.setAttribute('aria-pressed', String(button.dataset.target === colorTarget));
+    }
+    for (const button of $('#avatar-colors').children) {
+      button.setAttribute('aria-pressed', String(button.dataset.color === selected));
+    }
+  }
+  for (const button of colorTargets) {
+    button.onclick = () => { colorTarget = button.dataset.target; renderPalette(); };
+  }
+  for (const [name, tone] of colors) {
     const button = document.createElement('button');
     const swatch = document.createElement('span');
     button.type = 'button';
+    button.dataset.color = tone;
     button.setAttribute('aria-label', name);
-    button.setAttribute('aria-pressed', String(color === tone));
     swatch.style.setProperty('--avatar-color', tone);
     button.append(swatch);
     button.onclick = () => {
-      color = tone;
-      swatches.forEach(option => option.setAttribute('aria-pressed', String(option === button)));
+      if (colorTarget === 'background') {
+        profile().background = tone;
+        save();
+        paintPortrait(portraitContext);
+      } else {
+        color = tone;
+        $('#avatar-current-color').style.background = tone;
+      }
+      palette.close();
     };
-    undo.before(button);
-    return button;
-  });
+    $('#avatar-colors').append(button);
+  }
+  $('#avatar-current-color').style.background = color;
+  $('#avatar-color-open').onclick = () => { cancelIdle(); renderPalette(); palette.showModal(); };
+  $('#avatar-color-close').onclick = () => palette.close();
 
   function portraitPoint(event) {
     const bounds = portrait.getBoundingClientRect();
-    return {x: limit((event.clientX - bounds.left) * AVATAR_W / bounds.width, 0, AVATAR_W),
-      y: limit((event.clientY - bounds.top) * AVATAR_H / bounds.height, 0, AVATAR_H)};
+    const {x, y, scale} = portraitLayout();
+    return {x: (event.clientX - bounds.left - x) / scale, y: (event.clientY - bounds.top - y) / scale};
+  }
+  function appendPoint(point) {
+    if (point.x < 0 || point.x > AVATAR_W || point.y < 0 || point.y > AVATAR_H) return;
+    const lastPoint = pending.points.at(-1);
+    if (!lastPoint || Math.hypot(point.x - lastPoint.x, point.y - lastPoint.y) >= 1) pending.points.push(point);
   }
   portrait.onpointerdown = event => {
-    if (!event.isPrimary || event.button !== 0 || pending) return;
+    if (!editing || !rect || !event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0) || pending) return;
     event.preventDefault();
+    cancelIdle();
     pointer = event.pointerId;
     portrait.setPointerCapture(pointer);
-    pending = {color, points: [portraitPoint(event)]};
+    pending = {color, points: []};
+    appendPoint(portraitPoint(event));
     updatePortrait();
   };
   portrait.onpointermove = event => {
     if (!pending || event.pointerId !== pointer || pending.points.length >= 640) return;
-    const point = portraitPoint(event);
-    const lastPoint = pending.points.at(-1);
-    if (Math.hypot(point.x - lastPoint.x, point.y - lastPoint.y) < 1) return;
-    pending.points.push(point);
+    appendPoint(portraitPoint(event));
     updatePortrait();
   };
-  function finishStroke(event) {
-    if (!pending || event.pointerId !== pointer) return;
-    if (event.type === 'pointerup') {
+  function finishStroke(commit) {
+    if (!pending) return;
+    if (commit && pending.points.length) {
       profile().strokes.push(pending);
       if (profile().strokes.length > 120) profile().strokes.shift();
       save();
@@ -256,16 +373,35 @@ export function createGameAvatar({board, refit}) {
     pending = undefined;
     pointer = undefined;
     updatePortrait();
+    resetIdle();
   }
-  for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) portrait.addEventListener(event, finishStroke);
-  undo.onclick = () => { profile().strokes.pop(); updatePortrait(); save(); };
+  for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+    portrait.addEventListener(event, e => {
+      if (e.pointerId === pointer) finishStroke(event === 'pointerup');
+    });
+  }
+  undo.onclick = () => { profile().strokes.pop(); updatePortrait(); save(); resetIdle(); };
 
-  function showCloset() {
-    delete open.dataset.new;
-    renderCloset();
-    closet.showModal();
+  function setEditing(value) {
+    if (editing === value) return;
+    if (!value) finishStroke(true);
+    cancelIdle();
+    cancelAnimationFrame(frameId);
+    frameId = 0;
+    editing = value;
+    state.editorOpen = value;
+    last = undefined;
+    track.hidden = value;
+    portrait.hidden = !value;
+    tile.setAttribute('aria-pressed', String(value));
+    onEditorChange(value);
+    save();
+    if (value) resetIdle();
+    else schedulePatrol();
   }
+
   function showChooser() {
+    cancelIdle();
     chooserClose.hidden = !state.person;
     chooser.showModal();
   }
@@ -275,54 +411,69 @@ export function createGameAvatar({board, refit}) {
     button.onclick = () => {
       state.person = person;
       updatePortrait();
-      save();
       chooser.close();
+      setEditing(true);
+      save();
+      resetIdle();
     };
   }
-  open.onclick = showCloset;
-  $('#avatar-close').onclick = () => closet.close();
-  $('#avatar-change').onclick = () => {
-    returnToCloset = true;
-    closet.close();
-    showChooser();
+  tile.onclick = () => {
+    $('#pattern-dialog').close();
+    if (state.person) setEditing(true);
+    else showChooser();
   };
+  open.onclick = () => {
+    cancelIdle();
+    delete open.dataset.new;
+    delete tile.dataset.new;
+    delete patternButton.dataset.newAvatar;
+    renderCloset();
+    closet.showModal();
+  };
+  $('#avatar-close').onclick = () => closet.close();
+  $('#avatar-change').onclick = () => { closet.close(); showChooser(); };
   chooserClose.onclick = () => chooser.close();
   chooser.addEventListener('cancel', event => { if (!state.person) event.preventDefault(); });
-  chooser.addEventListener('close', () => {
-    if (returnToCloset) {
-      returnToCloset = false;
-      showCloset();
-    }
-    last = undefined;
-    schedule();
-  });
-  closet.addEventListener('close', () => {
-    pending = undefined;
-    pointer = undefined;
-    updatePortrait();
-    last = undefined;
-    schedule();
-  });
+  document.addEventListener('close', resetIdle, true);
   document.addEventListener('visibilitychange', () => {
     last = undefined;
-    schedule();
+    if (document.hidden) finishStroke(true);
+    resetIdle();
+    schedulePatrol();
   });
-  reduced.addEventListener('change', () => { last = undefined; schedule(); });
-
-  sheet.classList.add('has-avatar');
-  track.hidden = false;
-  open.hidden = false;
-  updatePortrait();
-  requestAnimationFrame(refit);
-  if (!state.person) showChooser();
+  reduced.addEventListener('change', () => { last = undefined; resetIdle(); schedulePatrol(); });
 
   return {
-    button: open,
+    button: patternButton,
+    get editing() { return editing; },
+    start() {
+      tile.hidden = false;
+      track.hidden = false;
+      updatePortrait();
+      if (!state.person) showChooser();
+      else if (state.editorOpen) setEditing(true);
+    },
+    showDrawing() { setEditing(false); },
+    pauseEditor() { if (editing) { finishStroke(true); cancelIdle(); } },
+    exportCanvas(blank = false) {
+      const copy = document.createElement('canvas');
+      copy.width = portrait.width;
+      copy.height = portrait.height;
+      paintPortrait(copy.getContext('2d'), undefined, blank ? null : ink);
+      return copy;
+    },
+    clearMarks() {
+      profile().strokes = [];
+      updatePortrait();
+      save();
+      resetIdle();
+    },
     createIcon: id => itemIcon(itemById.get(id)),
     markReward(id) {
       category = wardrobe.find(group => group.slot === itemById.get(id).slot);
-      if (closet.open) renderCloset();
-      else open.dataset.new = '';
+      tile.dataset.new = '';
+      patternButton.dataset.newAvatar = '';
+      open.dataset.new = '';
     },
     updateCollection(ids) {
       collection = new Set(ids.filter(id => itemById.has(id)));
@@ -331,18 +482,22 @@ export function createGameAvatar({board, refit}) {
     },
     resize(nextArea) {
       area = nextArea;
-      const bounds = sheet.getBoundingClientRect();
-      const paper = board.getBoundingClientRect();
-      extent = {width: bounds.width, height: bounds.height};
-      rect = {x: paper.left - bounds.left, y: paper.top - bounds.top, width: paper.width, height: paper.height};
+      const bounds = board.getBoundingClientRect();
+      rect = {x:0, y:0, width:Math.max(1,bounds.width), height:Math.max(1,bounds.height)};
+      boundary = avatarBoundaries(getPattern(), area, rect);
       ratio = Math.min(1.8, window.devicePixelRatio || 1);
-      const width = Math.round(extent.width * ratio);
-      const height = Math.round(extent.height * ratio);
-      if (track.width !== width || track.height !== height) {
-        track.width = width;
-        track.height = height;
+      const width = Math.round(rect.width * ratio);
+      const height = Math.round(rect.height * ratio);
+      for (const layer of [portrait, track]) {
+        if (layer.width !== width || layer.height !== height) {
+          layer.width = width;
+          layer.height = height;
+        }
       }
-      schedule();
+      if (editing) {
+        finishStroke(true);
+        paintPortrait(portraitContext);
+      } else schedulePatrol();
     },
     begin() {
       entry = patrolPose(elapsed, gear);
@@ -352,13 +507,13 @@ export function createGameAvatar({board, refit}) {
     stop() {
       playing = false;
       last = undefined;
-      schedule();
+      schedulePatrol();
     },
     playFrame(pattern, part, time) {
-      if (!rect || !state.person) return;
+      if (!rect || !state.person || editing) return;
       const pose = insidePosition(pattern, part, time, gear, rect, area);
       if (time < enterDuration) {
-        const start = outsidePosition(entry, rect, extent);
+        const start = outsidePosition(entry, boundary, rect);
         const u = time / enterDuration;
         const travel = u * u * (3 - 2 * u);
         const wing = gear.bag === 'wingpack';
@@ -371,7 +526,7 @@ export function createGameAvatar({board, refit}) {
         pose.airborne = wing ? rise : 0;
         pose.stride = .75 * Math.sin(time * 19);
       }
-      draw(pose, time, false);
+      drawPatrol(pose, time, false);
     }
   };
 }
