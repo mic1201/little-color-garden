@@ -529,6 +529,18 @@ p { line-height: 1.62; }
   height: 100%;
 }
 #avatar-track { z-index: 1; pointer-events: none; }
+#avatar-toolbar-motion {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.drawing-toolbar [data-avatar-interaction] :is(.toolbar-icon, #brush-icon) {
+  opacity: var(--actor-icon-opacity, 1);
+  transform: translateX(var(--actor-icon-shift, 0px)) rotate(var(--actor-icon-angle, 0deg));
+}
 #avatar-portrait { cursor: crosshair; touch-action: none; }
 .avatar-editing .board { visibility: hidden; }
 .avatar-editing #avatar-tools { grid-template-columns: repeat(2, minmax(44px, 1fr)); }

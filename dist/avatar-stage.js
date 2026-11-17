@@ -91,24 +91,24 @@ export function withinFrame(x,y) {
 }
 
 const wingRoute = [
-  [0,79,603,0,0,1],
-  [.32,79,592,.6,-.08,1],
-  [2.65,79,105,1,-.21,1],
-  [3.08,151,102,1,.07,1],
-  [6.11,881,102,1,-.08,1],
-  [8.63,881,573,1,.19,1],
-  [9.09,834,600,.89,.04,-1],
+  [0,79,603,0,0,1,'left'],
+  [.32,79,592,.6,-.08,1,'left'],
+  [2.65,79,105,1,-.21,1,'top'],
+  [3.08,151,102,1,.07,1,'top'],
+  [6.11,881,102,1,-.08,1,'right'],
+  [8.63,881,573,1,.19,1,'bottom'],
+  [9.09,834,600,.89,.04,-1,'bottom'],
   [11.94,79,603,0,0,-1]
 ];
 
 function outsideFlight(t) {
   const time=t % wingRoute.at(-1)[0];
   const next=wingRoute.findIndex(([end])=>end>time);
-  const [start,x,y,air,lean,face]=wingRoute[next-1];
+  const [start,x,y,air,lean,face,edge]=wingRoute[next-1];
   const [end,toX,toY,toAir,toLean]=wingRoute[next];
   const p=unit((time-start)/(end-start));
   return {x:lerp(x,toX,p),y:lerp(y,toY,p),airborne:lerp(air,toAir,p),
-    lean:lerp(lean,toLean,p),face,stride:.13*sine(t,2),size:.29,gait:'flight'};
+    lean:lerp(lean,toLean,p),face,stride:.13*sine(t,2),size:.29,gait:'flight',edge};
 }
 
 export function patrolPose(t, gear) {
@@ -120,10 +120,10 @@ export function patrolPose(t, gear) {
   const pace = spring ? 2.15 : skates ? 1.22 : gear.bag === 'picnic' ? 1.65 : 1.9;
   const gait = sine(t,pace);
   const lift = (spring?11:gear.shoes==='rabbitslippers'?8:skates?1.6:4) * Math.max(0,gait);
-  if(phase<walk) return {x:lerp(patrolTrack.left,patrolTrack.right,phase/walk),y:patrolTrack.bottom-lift,face:1,stride:gait,gait:'walk'};
-  if(phase<walk+climb) return {x:patrolTrack.right,y:lerp(patrolTrack.bottom,patrolTrack.top,(phase-walk)/climb),face:-1,lean:-.19,stride:gait*.9,climb:.92,gait:'climb'};
-  if(phase<2*walk+climb) return {x:lerp(patrolTrack.right,patrolTrack.left,(phase-walk-climb)/walk),y:patrolTrack.top-lift,face:-1,stride:gait,gait:'walk'};
-  return {x:patrolTrack.left,y:lerp(patrolTrack.top,patrolTrack.bottom,(phase-2*walk-climb)/climb),face:1,lean:.19,stride:gait*.9,climb:.92,gait:'climb'};
+  if(phase<walk) return {x:lerp(patrolTrack.left,patrolTrack.right,phase/walk),y:patrolTrack.bottom-lift,face:1,stride:gait,gait:'walk',edge:'bottom'};
+  if(phase<walk+climb) return {x:patrolTrack.right,y:lerp(patrolTrack.bottom,patrolTrack.top,(phase-walk)/climb),face:-1,lean:-.19,stride:gait*.9,climb:.92,gait:'climb',edge:'right'};
+  if(phase<2*walk+climb) return {x:lerp(patrolTrack.right,patrolTrack.left,(phase-walk-climb)/walk),y:patrolTrack.top-lift,face:-1,stride:gait,gait:'walk',edge:'top'};
+  return {x:patrolTrack.left,y:lerp(patrolTrack.top,patrolTrack.bottom,(phase-2*walk-climb)/climb),face:1,lean:.19,stride:gait*.9,climb:.92,gait:'climb',edge:'left'};
 }
 
 function landmark(part,t,x,y,layout=picture) {
@@ -291,13 +291,13 @@ export function drawActor(ctx, player, gear, ink, pose, t, outside = false) {
   const steps=gear.pants==='jogger'?1.16:gear.pants==='denim'||gear.pants==='berryoveralls'?.84:1;
   const waving=(pose.wave??0)*(gear.gloves==='pawglove'?1.22:gear.gloves?1.11:1);
   drawAvatar(ctx,player,gear,ink,{
-    ...pose, stride:(pose.stride??0)*packWeight*steps,wave:waving,glide:.93*air,
+    ...pose, stride:(pose.stride??0)*packWeight*steps,wave:waving,glide:pose.glide??.93*air,
     climb:(pose.climb??0)*(gear.gloves==='mitten'?.88:gear.gloves==='swim'?1.11:1),
     bagSwing:.29*sine(t,2.1)*(gear.bag==='moon'?1.22:gear.bag==='carrotsling'?1.04:.77),
     flap:wing?sine(t,3.25)*(.57+.83*air):0,
     earBounce:gear.hat==='rabbit-ears'?sine(t,2.15)*(high?1:.66):0,
     headTilt:sine(t,1.1)*(gear.hat==='sunhat'?.13:gear.hat==='cap'?.078:.045),
-    blink:fract(t*.313)>.974,
+    blink:pose.blink??fract(t*.313)>.974,
     crouch:(pose.crouch??0)+(gear.top==='hoodie'?.24*Math.max(pose.stride??0,0):0)
   });
   if (gear.neck && waving>.65) {

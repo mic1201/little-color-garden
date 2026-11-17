@@ -67,9 +67,9 @@
     <button id="pattern-open" class="toolbar-button pattern-open" aria-label="選擇畫紙圖案" title="選擇畫紙圖案" aria-haspopup="dialog"><span class="picture-picker-icon" aria-hidden="true">🖼️</span></button>
     <button id="undo" class="toolbar-button" aria-label="復原上一步" title="復原上一步">↶</button>
     <button id="redo" class="toolbar-button" aria-label="重做下一步" title="重做下一步">↷</button>
-    <button id="parent" class="toolbar-button parent-button" aria-label="大人幫手" title="大人幫手" aria-haspopup="dialog">⚙</button>
+    <button id="parent" class="toolbar-button parent-button" aria-label="大人幫手" title="大人幫手" aria-haspopup="dialog"><span class="toolbar-icon" aria-hidden="true">⚙</span></button>
     <button id="reward-open" type="button" class="toolbar-button" aria-label="裝飾品" title="裝飾品" aria-expanded="false" aria-controls="reward-tray" hidden>
-      <svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11h18v11H4zM2.5 7h21v4h-21zM13 7v15M13 7C3 8 6 0 10 3zm0 0c10 1 7-7 3-4z"/></svg>
+      <svg class="toolbar-icon" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11h18v11H4zM2.5 7h21v4h-21zM13 7v15M13 7C3 8 6 0 10 3zm0 0c10 1 7-7 3-4z"/></svg>
     </button>
     <button id="avatar-undo" type="button" class="toolbar-button" aria-label="復原主角筆跡" hidden>↶</button>
     <div id="reward-tray" class="reward-tray" role="group" aria-label="收集的裝飾品" hidden>
@@ -78,6 +78,7 @@
     </div>
   </div>
 </div>
+<canvas id="avatar-toolbar-motion" hidden aria-hidden="true"></canvas>
 <button id="storage-warning" class="storage-warning" hidden aria-label="需要大人協助，點一下查看作品儲存訊息" title="請大人幫忙">⚠️</button>
 </div>
 <dialog id="avatar-closet" aria-labelledby="avatar-closet-title">

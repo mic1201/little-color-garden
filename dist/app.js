@@ -515,7 +515,7 @@ function fillAt(point) {
 if (document.createElementNS) {
   if (nativeApp) {
     app.classList.add('is-native');
-    avatar = createGameAvatar({board, onEditorChange(editing) {
+    avatar = createGameAvatar({board, canInteract: () => pointer === null, onEditorChange(editing) {
       finish();
       if (editing) rewards.stop(true);
       app.classList.toggle('avatar-editing',editing);

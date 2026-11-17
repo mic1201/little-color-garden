@@ -1,5 +1,6 @@
 import {AVATAR_W, AVATAR_H, drawAvatar, drawWardrobeItem, itemById, makeAvatarInk, restoreOutfit, wardrobe} from './avatar-art.js';
 import {drawActor, enterDuration, insidePose, patrolPose, patrolTrack, sceneById, stageToPicture} from './avatar-stage.js';
+import {createToolbarInteractions} from './avatar-toolbar.js';
 import {ORIGINAL_PAPER} from './paper.js';
 import {transformSticker} from './reward-motion.js';
 
@@ -80,7 +81,7 @@ function itemIcon(piece, size = 72) {
   return canvas;
 }
 
-export function createGameAvatar({board, onEditorChange}) {
+export function createGameAvatar({board, canInteract, onEditorChange}) {
   const $ = selector => document.querySelector(selector);
   let stored;
   try { stored = JSON.parse(localStorage.getItem(KEY)); } catch { /* Start with a fresh character. */ }
@@ -126,25 +127,40 @@ export function createGameAvatar({board, onEditorChange}) {
   let idleTimer;
   let idleStart;
 
+  const toolbarInteractions = createToolbarInteractions({
+    toolbar: $('.drawing-toolbar'),
+    layer: $('#avatar-toolbar-motion'),
+    rewardTray: $('#reward-tray'),
+    drawPlayer: (target, pose, time) => drawActor(target, state.person, gear, ink, pose, time)
+  });
   const profile = () => state.profiles[state.person];
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(state)); }
     catch { status.textContent = '主角暫存空間不足，這次造型會先保留在畫面上。'; }
   }
 
-  function drawOnArtwork(pose, time) {
-    if (!state.person || !rect) return;
+  function clearArtwork() {
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
+  }
+
+  function drawOnArtwork(pose, time) {
+    if (!state.person || !rect) return;
+    clearArtwork();
     drawActor(ctx, state.person, gear, ink, pose, time);
   }
 
   function outsideFrame(now) {
     frameId = 0;
     if (editing || playing || document.hidden || chooser.open || !rect) return;
-    if (last !== undefined && !reduced.matches) elapsed += Math.min(.06, (now - last) / 1000);
+    const delta = last === undefined || reduced.matches ? 0 : Math.min(.06, (now - last) / 1000);
     last = now;
-    drawOnArtwork(outsidePosition(patrolPose(elapsed, gear), rect), elapsed);
+    const wasInteracting = toolbarInteractions.active;
+    if (!wasInteracting) elapsed += delta;
+    const pose = outsidePosition(patrolPose(elapsed, gear), rect);
+    if (toolbarInteractions.frame(pose, delta, !reduced.matches && canInteract())) {
+      if (!wasInteracting) clearArtwork();
+    } else drawOnArtwork(pose, elapsed);
     if (!reduced.matches) schedulePatrol();
   }
 
@@ -353,6 +369,7 @@ export function createGameAvatar({board, onEditorChange}) {
 
   function setEditing(value) {
     if (editing === value) return;
+    toolbarInteractions.cancel();
     if (!value) finishStroke(true);
     cancelIdle();
     cancelAnimationFrame(frameId);
@@ -404,9 +421,15 @@ export function createGameAvatar({board, onEditorChange}) {
   chooserClose.onclick = () => chooser.close();
   chooser.addEventListener('cancel', event => { if (!state.person) event.preventDefault(); });
   document.addEventListener('close', resetIdle, true);
+  for (const event of ['pointerdown', 'click']) {
+    document.addEventListener(event, toolbarInteractions.cancel, true);
+  }
   document.addEventListener('visibilitychange', () => {
     last = undefined;
-    if (document.hidden) finishStroke(true);
+    if (document.hidden) {
+      finishStroke(true);
+      toolbarInteractions.cancel();
+    }
     resetIdle();
     schedulePatrol();
   });
@@ -452,6 +475,7 @@ export function createGameAvatar({board, onEditorChange}) {
     resize(nextArea) {
       area = nextArea;
       const bounds = board.getBoundingClientRect();
+      toolbarInteractions.resize(bounds);
       rect = {x:0, y:0, width:Math.max(1,bounds.width), height:Math.max(1,bounds.height)};
       ratio = Math.min(1.8, window.devicePixelRatio || 1);
       const width = Math.round(rect.width * ratio);
@@ -468,6 +492,7 @@ export function createGameAvatar({board, onEditorChange}) {
       } else schedulePatrol();
     },
     begin() {
+      toolbarInteractions.cancel();
       entry = patrolPose(elapsed, gear);
       playing = true;
       last = undefined;
