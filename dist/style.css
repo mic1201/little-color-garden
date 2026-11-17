@@ -434,7 +434,6 @@ p { line-height: 1.62; }
   box-shadow: 0 3px 15px #51416423;
 }
 .reward-tray[data-dragging] { opacity: 0; pointer-events: none; }
-#reward-empty { margin: 0; padding: 9px; font-size: 14px; }
 #reward-inventory {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
@@ -445,6 +444,7 @@ p { line-height: 1.62; }
   touch-action: pan-y;
 }
 .reward-item {
+  position: relative;
   display: grid;
   place-items: center;
   min-height: 44px;
@@ -458,6 +458,7 @@ p { line-height: 1.62; }
 }
 .reward-item svg { width: 32px; height: 32px; pointer-events: none; }
 .reward-item:active { cursor: grabbing; }
+.reward-item[data-locked] { opacity: 1; cursor: default; touch-action: pan-y; }
 .reward-item:focus-visible { outline: none; filter: drop-shadow(0 0 3px #9c71eb); }
 
 #reward-celebration {
@@ -544,7 +545,16 @@ p { line-height: 1.62; }
 #avatar-portrait { cursor: crosshair; touch-action: none; }
 .avatar-editing .board { visibility: hidden; }
 .avatar-editing #avatar-tools { grid-template-columns: repeat(3, minmax(44px, 1fr)); }
-.avatar-editing .toolbar-actions { grid-template-columns: repeat(3, minmax(44px, 1fr)); }
+:where(.avatar-editing) .toolbar-actions:has(#reward-open:not([hidden])) { grid-template-columns: repeat(4, minmax(44px, 1fr)); }
+#avatar-stickers {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  touch-action: none;
+}
 #avatar-open { position: relative; background: #e8efe1; }
 #pattern-open, #avatar-pattern { position: relative; }
 #pattern-open[data-new-avatar]::after, #avatar-pattern[data-new]::after, #avatar-open[data-new]::after {
@@ -672,14 +682,14 @@ p { line-height: 1.62; }
 }
 #avatar-items canvas { width: 42px; height: 42px; }
 #avatar-items button { position: relative; }
-#avatar-items button[data-locked] canvas { opacity: .56; }
-#avatar-items button[data-locked]::after, #avatar-items button[data-equipped]::after {
+#avatar-items button[data-locked] canvas, .reward-item[data-locked] svg { opacity: .56; }
+#avatar-items button[data-locked]::after, #avatar-items button[data-equipped]::after, .reward-item[data-locked]::after {
   position: absolute;
   top: 3px;
   right: 5px;
   font-size: 12px;
 }
-#avatar-items button[data-locked]::after { content: '🔒'; }
+#avatar-items button[data-locked]::after, .reward-item[data-locked]::after { content: '🔒'; }
 #avatar-items button[data-equipped]::after { content: '✓'; color: #466d55; }
 .avatar-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .avatar-choices button { font-size: 16px; }

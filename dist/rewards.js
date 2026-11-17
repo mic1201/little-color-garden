@@ -1,11 +1,12 @@
 import {beginPaper, includePoint, ORIGINAL_PAPER, paperPoint, rasterSize} from './paper.js';
 import {createPaintProgress, REWARD_THRESHOLD} from './reward-progress.js';
 import {createMotionScene, drawMotionScene, motionFor, motionPartAt, transformSticker} from './reward-motion.js';
-import {placedStickerArt, stickerArt, stickerById, stickerIcon, stickers, STICKER_SIZE, SVG_NS} from './reward-stickers.js';
+import {createPlacedSticker, placedStickerArt, stickerById, stickerIcon, stickers, STICKER_SIZE, SVG_NS} from './reward-stickers.js';
 import {itemById} from './avatar-art.js';
 
 const MAX_PLACED = 100;
 const radius = STICKER_SIZE / 2;
+const arrowDelta = {ArrowLeft: [-1,0], ArrowRight: [1,0], ArrowUp: [0,-1], ArrowDown: [0,1]};
 const clamp = (n, low, high) => Math.max(low, Math.min(n, high));
 const wearableKey = id => `wear:${id}`;
 const outfitPiece = key => typeof key === 'string' && key.startsWith('wear:') ? itemById.get(key.slice(5)) : undefined;
@@ -136,8 +137,6 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   const tray = document.querySelector('#reward-tray');
   const trayButton = document.querySelector('#reward-open');
   const inventory = document.querySelector('#reward-inventory');
-  const emptyTray = document.querySelector('#reward-empty');
-  emptyTray.textContent = `塗色達到 ${REWARD_THRESHOLD}% 就能開寶箱。`;
   const collectionSettings = document.querySelector('#reward-collection-settings');
   const collectionCount = document.querySelector('#reward-collection-count');
   const resetCollection = document.querySelector('#reward-collection-reset');
@@ -169,7 +168,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   let testStickers = [];
 
   const availableStickers = () => testUnlocked ? stickers.map(([id]) => id) : collected.filter(id => stickerById.has(id));
-  const canPlay = () => parts.length > 0 && (testUnlocked || reward?.completed);
+  const canPlay = () => parts.length > 0 && reward?.completed === true;
 
   function persist() {
     state.reward = reward;
@@ -178,15 +177,18 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   }
 
   function setTrayOpen(open) {
+    const changing = tray.hidden === open;
     tray.hidden = !open;
     trayButton.setAttribute('aria-expanded', String(open));
     if (open) delete trayButton.dataset.new;
+    if (changing && avatar?.editing) {
+      if (open) avatar.pauseEditor();
+      else avatar.resumeEditor();
+    }
   }
 
-  function updateInventory() {
+  function updateCollectionDisplay() {
     const stickerCount = collected.filter(id => stickerById.has(id)).length;
-    emptyTray.hidden = testUnlocked || stickerCount > 0;
-    inventory.hidden = !emptyTray.hidden;
     collectionCount.textContent = avatar
       ? `已收集 ${stickerCount} 件裝飾品、${collected.length - stickerCount} 件穿搭`
       : `已收集 ${stickerCount} 件裝飾品`;
@@ -197,8 +199,13 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   }
 
   function renderInventory() {
-    inventory.replaceChildren(...availableStickers().map(makeInventoryItem));
-    updateInventory();
+    const unlocked = new Set(availableStickers());
+    const locked = stickers.filter(([id]) => !unlocked.has(id));
+    inventory.replaceChildren(
+      ...Array.from(unlocked, id => makeInventoryItem(id)),
+      ...locked.map(([id]) => makeInventoryItem(id, true))
+    );
+    updateCollectionDisplay();
   }
 
   function updatePlayback(playing) {
@@ -272,7 +279,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
         motionTime = (now - started) / 1000;
         beginPaper(context, motionLayer, area);
         drawMotionScene(context, scene, motionTime);
-        avatar?.playFrame(snapshot.pattern, parts[0], motionTime);
+        avatar?.playFrame(snapshot.pattern, parts, motionTime);
         stickerNodes.forEach(({element, sticker}, i) => {
           if (anchors[i]) poseSticker(element, transformSticker(anchors[i], sticker, motionTime));
         });
@@ -328,8 +335,11 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     if (id) {
       const piece = outfitPiece(id);
       const item = piece ? null : makeInventoryItem(id);
-      if (item) inventory.append(item);
-      updateInventory();
+      if (item) {
+        inventory.querySelector(`[data-sticker="${id}"]`)?.remove();
+        inventory.insertBefore(item, inventory.querySelector('[data-locked]'));
+      }
+      updateCollectionDisplay();
       showChest(id, item, piece);
     }
     void play();
@@ -360,7 +370,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
       if (percent === null) return;
       progress.textContent = `${percent}%`;
       progress.setAttribute('aria-label', `圖案塗色進度 ${percent}%`);
-      if (percent >= REWARD_THRESHOLD && !reward.completed && !testUnlocked) award();
+      if (percent >= REWARD_THRESHOLD && !reward.completed) award();
     }, 65);
   }
 
@@ -414,14 +424,21 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     if (drag || event.isPrimary === false || event.pointerType === 'mouse' && event.button !== 0) return;
     suppressedClick = null;
     const {clientX: x, clientY: y, pointerId} = event;
-    const rect = board.getBoundingClientRect();
-    const paperAtPointer = paperPoint(x, y, rect, area);
-    const anchor = sticker && !motionLayer.hidden && parts[motionPartAt(state.pattern, parts, sticker)];
-    const displayed = anchor ? transformSticker(anchor, sticker, motionTime) : sticker;
-    drag = {
-      pointerId, id, node, sticker, x, y, moved: false,
-      offset: displayed ? {x: displayed.x - paperAtPointer.x, y: displayed.y - paperAtPointer.y} : {x: 0, y: 0}
-    };
+    const editor = avatar?.editing ? avatar.decorations : null;
+    let offset = {x:0, y:0};
+    if (editor) {
+      if (sticker) {
+        const center = centerOf(node);
+        offset = {x:center.x - x, y:center.y - y};
+      }
+      avatar.pauseEditor();
+    } else if (sticker) {
+      const point = paperPoint(x, y, board.getBoundingClientRect(), area);
+      const anchor = !motionLayer.hidden && parts[motionPartAt(state.pattern, parts, sticker)];
+      const displayed = anchor ? transformSticker(anchor, sticker, motionTime) : sticker;
+      offset = {x:displayed.x - point.x, y:displayed.y - point.y};
+    }
+    drag = {pointerId, id, node, sticker, x, y, moved:false, offset, editor};
     if (sticker) event.preventDefault();
     try { node.setPointerCapture(pointerId); } catch { /* Window listeners also track the pointer. */ }
   }
@@ -436,7 +453,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     if (!drag.moved) {
       if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 4) return;
       drag.moved = true;
-      stop();
+      if (!drag.editor) stop();
       if (!drag.sticker) {
         tray.dataset.dragging = '';
         drag.ghost = stickerGhost(drag.id);
@@ -444,7 +461,8 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     }
     event.preventDefault();
     if (drag.sticker) {
-      poseSticker(drag.node, positionFromEvent(event, board.getBoundingClientRect(), drag.offset));
+      if (drag.editor) drag.editor.preview(drag.node, event.clientX + drag.offset.x, event.clientY + drag.offset.y);
+      else poseSticker(drag.node, positionFromEvent(event, board.getBoundingClientRect(), drag.offset));
     } else {
       drag.ghost.style.transform = ghostAt({x: event.clientX, y: event.clientY});
     }
@@ -456,7 +474,8 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
 
   function cancelDrag() {
     if (!drag) return;
-    if (drag.sticker) poseSticker(drag.node, drag.sticker);
+    if (drag.editor) avatar.resumeEditor();
+    else if (drag.sticker) poseSticker(drag.node, drag.sticker);
     drag.ghost?.remove();
     delete tray.dataset.dragging;
     drag = null;
@@ -464,43 +483,64 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
 
   function endDrag(event) {
     if (drag?.pointerId !== event.pointerId) return;
-    const {id, sticker, node, moved, offset} = drag;
-    cancelDrag();
-    if (!moved || event.type !== 'pointerup') return;
-    event.preventDefault();
-    if (!sticker) {
-      suppressedClick = node;
-      setTimeout(() => { if (suppressedClick === node) suppressedClick = null; }, 350);
-    }
-    const rect = board.getBoundingClientRect();
-    const {clientX: x, clientY: y} = event;
-    if (sticker && (inRect(x, y, trayButton.getBoundingClientRect()) ||
-        (!tray.hidden && inRect(x, y, tray.getBoundingClientRect())))) {
-      removeSticker(sticker);
-    } else if (inRect(x, y, rect)) {
-      const point = positionFromEvent(event, rect, offset);
-      if (sticker) {
-        savePlacement(sticker, point);
-        poseSticker(node, sticker);
-      } else if (addSticker(id, point)) {
-        setTrayOpen(false);
+    const {id, sticker, node, moved, offset, editor} = drag;
+    try {
+      if (!moved || event.type !== 'pointerup') return;
+      event.preventDefault();
+      if (!sticker) {
+        suppressedClick = node;
+        setTimeout(() => { if (suppressedClick === node) suppressedClick = null; }, 350);
       }
+      const rect = editor ? editor.bounds() : board.getBoundingClientRect();
+      const {clientX: x, clientY: y} = event;
+      if (sticker && (inRect(x, y, trayButton.getBoundingClientRect()) ||
+          (!tray.hidden && inRect(x, y, tray.getBoundingClientRect())))) {
+        if (editor) editor.remove(sticker);
+        else removeSticker(sticker);
+      } else if (inRect(x, y, rect)) {
+        if (editor) {
+          if (sticker) editor.move(sticker, x + offset.x, y + offset.y);
+          else if (addAvatarSticker(id, x, y)) setTrayOpen(false);
+        } else {
+          const point = positionFromEvent(event, rect, offset);
+          if (sticker) savePlacement(sticker, point);
+          else if (addSticker(id, point)) setTrayOpen(false);
+        }
+      }
+    } finally {
+      cancelDrag();
     }
   }
 
-  function makeInventoryItem(id) {
+  function addAvatarSticker(id, x, y) {
+    const placed = avatar.decorations.add(id, x, y);
+    status.textContent = placed ? `${stickerById.get(id).name}已放到主角畫布上。`
+      : '主角畫布的裝飾品滿了，移除一個就能再加。';
+    return placed;
+  }
+
+  function makeInventoryItem(id, locked = false) {
     const item = document.createElement('button');
     item.type = 'button';
     item.className = 'reward-item';
     item.dataset.sticker = id;
-    item.setAttribute('aria-label', `${stickerById.get(id).name}，拖放到畫布`);
-    item.title = stickerById.get(id).name;
+    const name = stickerById.get(id).name;
+    item.setAttribute('aria-label', `${name}，${locked ? '未解鎖' : '拖放到畫布'}`);
     item.innerHTML = stickerIcon(id);
+    item.toggleAttribute('data-locked', locked);
+    item.disabled = locked;
+    if (locked) return item;
     item.addEventListener('pointerdown', event => startDrag(event, id, item));
     item.onclick = event => {
       if (event.detail && suppressedClick === item) return;
-      stop();
-      const placed = addSticker(id, position({x: area.x + area.width / 2, y: area.y + area.height / 2}));
+      let placed;
+      if (avatar?.editing) {
+        const {x, y} = centerOf(avatar.decorations.layer);
+        placed = addAvatarSticker(id, x, y);
+      } else {
+        stop();
+        placed = addSticker(id, position({x: area.x + area.width / 2, y: area.y + area.height / 2}));
+      }
       if (placed) {
         setTrayOpen(false);
         placed.focus();
@@ -510,18 +550,13 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   }
 
   function renderSticker(sticker) {
-    const element = document.createElementNS(SVG_NS, 'g');
-    element.classList.add('placed-sticker');
-    element.innerHTML = `<rect class="sticker-handle" width="64" height="64"/>${stickerArt(sticker.id)}`;
-    element.setAttribute('tabindex', '0');
-    element.setAttribute('role', 'button');
-    element.setAttribute('aria-label', `${stickerById.get(sticker.id).name}，可拖曳移動`);
+    const element = createPlacedSticker(sticker.id);
     stickerLayer.append(element);
     stickerNodes.push({element, sticker});
     poseSticker(element, sticker);
     element.addEventListener('pointerdown', event => startDrag(event, sticker.id, element, sticker));
     element.addEventListener('keydown', event => {
-      const delta = {ArrowLeft: [-1,0], ArrowRight: [1,0], ArrowUp: [0,-1], ArrowDown: [0,1]}[event.key];
+      const delta = arrowDelta[event.key];
       if (event.key !== 'Delete' && event.key !== 'Backspace' && !delta) return;
       event.preventDefault();
       stop();
@@ -542,6 +577,28 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     reward.stickers.forEach(renderSticker);
     testStickers.forEach(renderSticker);
   }
+
+  const editor = avatar?.decorations;
+  editor?.layer.addEventListener('pointerdown', event => {
+    const node = event.target.closest('.placed-sticker');
+    const sticker = editor.lookup(node);
+    if (avatar.editing && sticker) startDrag(event, sticker.id, node, sticker);
+  });
+  editor?.layer.addEventListener('keydown', event => {
+    const node = event.target.closest('.placed-sticker');
+    const sticker = editor.lookup(node);
+    const delta = arrowDelta[event.key];
+    if (!avatar.editing || !sticker || (!delta && event.key !== 'Delete' && event.key !== 'Backspace')) return;
+    event.preventDefault();
+    const {x, y} = centerOf(node);
+    avatar.pauseEditor();
+    if (delta) editor.move(sticker, x + delta[0] * 12, y + delta[1] * 12);
+    else {
+      editor.remove(sticker);
+      trayButton.focus();
+    }
+    avatar.resumeEditor();
+  });
 
   if (testUnlock) {
     testUnlock.hidden = false;
@@ -576,6 +633,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     restoreCollection.focus();
   };
   restoreCollection.onclick = () => {
+    finishFlight();
     collected = changeRewardCollection(state, true);
     renderInventory();
     persist();

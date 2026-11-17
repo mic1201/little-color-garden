@@ -48,7 +48,8 @@ function syncTool() {
   const selectedStamp = editingAvatar ? avatar.stamp : stampShape;
   const summary = $(editingAvatar ? '#avatar-brush-open' : '#brush-summary');
   summary.dataset.activeTool = selected;
-  updateBrushSummary(summary, $(editingAvatar ? '#avatar-brush-name' : '#brush-name'), selected, selectedStamp);
+  updateBrushSummary(summary, $(editingAvatar ? '#avatar-brush-name' : '#brush-name'), selected, selectedStamp,
+    $(editingAvatar ? '#avatar-brush-icon' : '#brush-icon'), $('#brush-picker-icon'));
   stampOptions.hidden = selected !== 'stamp';
   for (const entry of document.querySelectorAll('.tool')) {
     entry.hidden = editingAvatar && entry.dataset.tool === 'fill';
@@ -252,6 +253,7 @@ async function drawSvg(context, markup, area) {
 }
 
 async function createArtworkPng() {
+  if (avatar?.editing) await avatar.decorations.ready();
   const output = avatar?.editing ? avatar.exportCanvas()
     : await drawArtwork(state, paperView(view.width, view.height, state.paper), 4096, rewards ? rewardExportMarkup(state) : '');
   const png = await new Promise(resolve => output.toBlob(resolve, 'image/png'));
@@ -534,12 +536,12 @@ if (document.createElementNS) {
     app.classList.add('is-native');
     avatar = createGameAvatar({board, canInteract: () => pointer === null, onEditorChange(editing) {
       finish();
-      if (editing) rewards.stop(true);
+      rewards.stop(true);
       app.classList.toggle('avatar-editing',editing);
       board.inert = editing;
       $('.toolbar-paint').hidden = editing;
       for (const id of ['avatar-tools','avatar-open','avatar-undo']) $(`#${id}`).hidden = !editing;
-      for (const id of ['undo','redo','reward-open']) $(`#${id}`).hidden = editing;
+      for (const id of ['undo','redo']) $(`#${id}`).hidden = editing;
       syncTool();
       document.querySelectorAll('.pattern').forEach(b=>b.setAttribute('aria-pressed',String(!editing && b.dataset.id===state.pattern)));
       fit();

@@ -90,7 +90,7 @@ export function createAvatarPainting() {
     }
   }
 
-  return function render(person, strokes, pending) {
+  function render(person, strokes, pending) {
     if (lastPerson !== person || !rendered.every((stroke,i)=>strokes[i]===stroke)) {
       committed.clear();
       rendered = [];
@@ -105,5 +105,14 @@ export function createAvatarPainting() {
     const result=new Map(committed);
     for (const [id] of masksFor(person,pending.outfit)) result.set(id,live.get(id));
     return result;
-  };
+  }
+
+  function surfaceAt(person, outfit, x, y) {
+    const px = Math.floor(x), py = Math.floor(y);
+    if (px < 0 || py < 0 || px >= AVATAR_W || py >= AVATAR_H) return;
+    return masksFor(person,outfit).find(([,mask]) =>
+      mask.getContext('2d').getImageData(px,py,1,1).data[3] > 0)?.[0];
+  }
+
+  return {render, surfaceAt};
 }

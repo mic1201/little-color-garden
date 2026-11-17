@@ -1,9 +1,12 @@
 import {AVATAR_W, AVATAR_H, AVATAR_RAINBOW, drawAvatar, drawWardrobeItem, itemById, restoreOutfit, wardrobe} from './avatar-art.js';
 import {createAvatarPainting} from './avatar-paint.js';
-import {drawActor, enterDuration, insidePose, patrolPose, patrolTrack, sceneById, stageToPicture} from './avatar-stage.js';
+import {createAvatarStickers, restoreAvatarStickers} from './avatar-stickers.js';
+import {drawActor, enterDuration, insidePose, patrolPose, patrolTrack, pictureInteractionPose, sceneById, stageToPicture} from './avatar-stage.js';
 import {createToolbarInteractions} from './avatar-toolbar.js';
 import {ORIGINAL_PAPER} from './paper.js';
 import {transformSticker} from './reward-motion.js';
+import {pictureInteraction} from './picture-interactions.js';
+import {drawInteractionProps} from './interaction-art.js';
 import {RAINBOW_COLORS} from './fills.js';
 import {TOOLS, STAMPS} from './engine.js';
 
@@ -39,7 +42,7 @@ export function restoreAvatar(saved) {
     })) : [];
     const background = typeof profile?.background === 'string' && /^#[0-9a-f]{6}$/i.test(profile.background)
       ? profile.background : DEFAULT_BACKGROUND;
-    return [id, {equipped, strokes, background}];
+    return [id, {equipped, strokes, background, stickers:restoreAvatarStickers(profile?.stickers)}];
   }));
   return {person, profiles, editorOpen: Boolean(person && saved?.editorOpen !== false)};
 }
@@ -72,19 +75,27 @@ function genericPose(part, t, gear) {
   };
 }
 
-function insidePosition(pattern, part, t, gear, rect, area) {
+function insidePosition(pattern, part, t, gear, rect, area, interaction) {
   const scene = sceneById.get(pattern);
   const demo = scene && insidePose(Math.max(t, enterDuration), {x:347, y:467}, scene, part, gear);
-  const pose = demo ? {...demo, ...stageToPicture(demo.x, demo.y, pattern),
-    shadowY: demo.shadowY === undefined ? undefined : stageToPicture(demo.x, demo.shadowY, pattern).y} : genericPose(part, t, gear);
-  const size = pose.size * limit(Math.min(rect.width, rect.height) / 550, .40, 1);
-  const x = limit(rect.x + (pose.x - area.x) * rect.width / area.width, rect.x + size * 127, rect.x + rect.width - size * 127);
-  const minY = rect.y + size * 272;
+  const pose = interaction ?? pictureInteractionPose(pattern, part, t, gear) ?? (demo ? {...demo, ...stageToPicture(demo.x, demo.y, pattern),
+    shadowY: demo.shadowY === undefined ? undefined : stageToPicture(demo.x, demo.shadowY, pattern).y} : genericPose(part, t, gear));
+  const screen = ({x,y}) => ({
+    x:rect.x + (x - area.x) * rect.width / area.width,
+    y:rect.y + (y - area.y) * rect.height / area.height
+  });
+  const window = pose.window?.map(screen);
+  const size = pose.paperSize ? pose.size * rect.width / area.width
+    : window ? Math.hypot(window[1].x - window[0].x, window[1].y - window[0].y) / 172
+    : pose.size * limit(Math.min(rect.width, rect.height) / 550, .40, 1);
+  const point = screen(pose);
+  const x = limit(point.x, rect.x + size * 127, rect.x + rect.width - size * 127);
+  const minY = rect.y + size * (pose.anchorY ?? 272);
   const maxY = rect.y + rect.height - 5;
-  const y = limit(rect.y + (pose.y - area.y) * rect.height / area.height, minY, maxY);
+  const y = limit(point.y, minY, maxY);
   const shadowY = pose.shadowY === undefined ? undefined
     : limit(rect.y + (pose.shadowY - area.y) * rect.height / area.height, minY, maxY);
-  return {...pose, x, y, size, shadowY};
+  return {...pose, x, y, size, shadowY, window};
 }
 
 function itemIcon(piece, size = 72) {
@@ -148,14 +159,21 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
   let idleTimer;
   let idleStart;
 
+  const profile = () => state.profiles[state.person];
+  const outfit = () => testOutfits?.[state.person] ?? profile().equipped;
+  const decorations = createAvatarStickers({
+    layer: $('#avatar-stickers'), profile, layout: portraitLayout, save,
+    surfaceAt: (x, y) => paintAvatar.surfaceAt(state.person, gear, x, y),
+    visibleSurface: surface => surface === 'body' || gear[itemById.get(surface)?.slot] === surface
+  });
+  const drawPlayer = (target, pose, time) =>
+    drawActor(target, state.person, gear, ink, pose, time, false, decorations.drawAttached);
   const toolbarInteractions = createToolbarInteractions({
     toolbar: $('.drawing-toolbar'),
     layer: $('#avatar-toolbar-motion'),
     rewardTray: $('#reward-tray'),
-    drawPlayer: (target, pose, time) => drawActor(target, state.person, gear, ink, pose, time)
+    drawPlayer
   });
-  const profile = () => state.profiles[state.person];
-  const outfit = () => testOutfits?.[state.person] ?? profile().equipped;
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(state)); }
     catch { status.textContent = '主角暫存空間不足，這次造型會先保留在畫面上。'; }
@@ -166,10 +184,20 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
     ctx.clearRect(0, 0, rect.width, rect.height);
   }
 
-  function drawOnArtwork(pose, time) {
+  function drawProps(props, after) {
+    ctx.save();
+    ctx.scale(rect.width / area.width, rect.height / area.height);
+    ctx.translate(-area.x,-area.y);
+    drawInteractionProps(ctx, props, after);
+    ctx.restore();
+  }
+
+  function drawOnArtwork(pose, time, props) {
     if (!state.person || !rect) return;
     clearArtwork();
-    drawActor(ctx, state.person, gear, ink, pose, time);
+    if (props?.length) drawProps(props,false);
+    drawPlayer(ctx, pose, time);
+    if (props?.length) drawProps(props,true);
   }
 
   function outsideFrame(now) {
@@ -201,9 +229,13 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
     target.setTransform(ratio, 0, 0, ratio, 0, 0);
     target.fillStyle = profile().background;
     target.fillRect(0, 0, rect.width + 1, rect.height + 1);
+    const editor = target === portraitContext;
+    if (!editor) decorations.drawBackground(target);
+    const decorate = editor ? ctx => decorations.pose(ctx.getTransform(), ratio) : decorations.drawAttached;
     if (t === undefined) {
       target.setTransform(ratio * scale, 0, 0, ratio * scale, ratio * x, ratio * y);
       drawAvatar(target, state.person, gear, marks);
+      decorate(target);
       return;
     }
     const wave = Math.sin(t * Math.PI * 2 / 4);
@@ -221,10 +253,11 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
       stride:.48 * wave,
       airborne:wing ? lift : 0,
       gait:wing ? 'flight' : 'hop'
-    }, t);
+    }, t, false, decorate);
   }
 
-  const readyToAnimate = () => editing && !pending && !document.hidden && !document.querySelector('dialog[open]');
+  const readyToAnimate = () => editing && !pending && !document.hidden &&
+    !document.querySelector('dialog[open], #reward-tray:not([hidden])');
   function idleFrame(now) {
     frameId = 0;
     if (!readyToAnimate() || reduced.matches) {
@@ -259,7 +292,8 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
   function updatePortrait() {
     if (!state.person) return;
     gear = Object.fromEntries(Object.entries(outfit()).filter(([, id]) => collection.has(id)));
-    ink = paintAvatar(state.person, profile().strokes, pending);
+    ink = paintAvatar.render(state.person, profile().strokes, pending);
+    decorations.sync();
     undo.disabled = profile().strokes.length === 0;
     icon.setTransform(1, 0, 0, 1, 0, 0);
     icon.clearRect(0, 0, 76, 76);
@@ -432,6 +466,7 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
     last = undefined;
     track.hidden = value;
     portrait.hidden = !value;
+    decorations.layer.toggleAttribute('hidden', !value);
     tile.setAttribute('aria-pressed', String(value));
     onEditorChange(value);
     save();
@@ -491,6 +526,7 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
 
   return {
     button: patternButton,
+    decorations,
     get editing() { return editing; },
     get tool() { return tool; },
     get stamp() { return stamp; },
@@ -505,6 +541,7 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
     },
     showDrawing() { setEditing(false); },
     pauseEditor() { if (editing) { finishStroke(true); cancelIdle(); } },
+    resumeEditor() { if (editing) resetIdle(); },
     exportCanvas(blank = false) {
       const copy = document.createElement('canvas');
       copy.width = portrait.width;
@@ -526,6 +563,7 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
       open.dataset.new = '';
     },
     updateCollection(ids, testUnlocked = false) {
+      decorations.setTesting(testUnlocked);
       if (testUnlocked) testOutfits ??= Object.fromEntries(people.map(id => [id, {...state.profiles[id].equipped}]));
       else testOutfits = undefined;
       collection = new Set(ids.filter(id => itemById.has(id)));
@@ -537,6 +575,7 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
       const bounds = board.getBoundingClientRect();
       toolbarInteractions.resize(bounds);
       rect = {x:0, y:0, width:Math.max(1,bounds.width), height:Math.max(1,bounds.height)};
+      decorations.resize(rect.width, rect.height);
       ratio = Math.min(1.8, window.devicePixelRatio || 1);
       const width = Math.round(rect.width * ratio);
       const height = Math.round(rect.height * ratio);
@@ -562,24 +601,33 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
       last = undefined;
       schedulePatrol();
     },
-    playFrame(pattern, part, time) {
+    playFrame(pattern, parts, time) {
       if (!rect || !state.person || editing) return;
-      const pose = insidePosition(pattern, part, time, gear, rect, area);
+      const interaction = pictureInteraction(pattern, time, parts, transformSticker);
+      const pose = insidePosition(pattern, parts[0], time, gear, rect, area, interaction?.pose);
       if (time < enterDuration) {
         const start = outsidePosition(entry, rect);
         const u = time / enterDuration;
         const travel = u * u * (3 - 2 * u);
         const wing = gear.bag === 'wingpack';
         const rise = 4 * u * (1 - u);
-        pose.face = start.x < pose.x ? 1 : -1;
+        const toward = start.x < pose.x ? 1 : -1;
+        if (pose.anchorY !== undefined) pose.anchorY = mix(280, pose.anchorY, travel);
+        if (pose.swim) {
+          pose.face = travel < .5 ? toward : pose.face;
+          pose.lean = mix(start.lean ?? 0, pose.lean, travel);
+          pose.swim *= travel;
+        } else pose.face = toward;
         pose.x = mix(start.x, pose.x, travel);
         pose.y = mix(start.y, pose.y, travel) - (wing ? 25 : 9) * rise;
         pose.size = mix(start.size, pose.size, travel);
-        pose.gait = wing ? 'flight' : 'run';
-        pose.airborne = wing ? rise : 0;
-        pose.stride = .75 * Math.sin(time * 19);
+        if (pose.gait !== 'swim') {
+          pose.gait = wing ? 'flight' : 'run';
+          pose.airborne = wing ? rise : 0;
+        }
+        pose.stride = mix(.75 * Math.sin(time * 19), pose.stride, pose.swim ?? 0);
       }
-      drawOnArtwork(pose, time);
+      drawOnArtwork(pose, time, interaction?.props);
     }
   };
 }

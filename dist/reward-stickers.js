@@ -59,6 +59,16 @@ export function stickerIcon(id) {
   return `<svg viewBox="0 0 64 64" aria-hidden="true">${stickerArt(id)}</svg>`;
 }
 
+export function createPlacedSticker(id) {
+  const element = document.createElementNS(SVG_NS, 'g');
+  element.classList.add('placed-sticker');
+  element.innerHTML = `<rect class="sticker-handle" width="64" height="64"/>${stickerArt(id)}`;
+  element.setAttribute('tabindex', '0');
+  element.setAttribute('role', 'button');
+  element.setAttribute('aria-label', `${stickerById.get(id).name}，可拖曳移動`);
+  return element;
+}
+
 export function placedStickerArt(sticker) {
   const offset = 32 * STICKER_SIZE / 64;
   return `<g transform="translate(${sticker.x - offset} ${sticker.y - offset}) scale(${STICKER_SIZE / 64})">${stickerArt(sticker.id)}</g>`;

@@ -52,7 +52,7 @@
     </g>
   </svg>
 </div>
-<div id="welcome" class="welcome"><span aria-hidden="true">🖍️</span><div class="welcome-trail" aria-hidden="true">· 〰 ·</div><p class="sr-only">用手指或觸控筆開始畫畫</p></div></div><canvas id="avatar-track" aria-hidden="true" hidden></canvas><canvas id="avatar-portrait" role="img" aria-label="主角畫布，用手指畫在主角身上" hidden></canvas></div></div></main><div class="drawing-toolbar" aria-label="畫畫工具" role="group">
+<div id="welcome" class="welcome"><span aria-hidden="true">🖍️</span><div class="welcome-trail" aria-hidden="true">· 〰 ·</div><p class="sr-only">用手指或觸控筆開始畫畫</p></div></div><canvas id="avatar-track" aria-hidden="true" hidden></canvas><canvas id="avatar-portrait" role="img" aria-label="主角畫布，用手指畫在主角身上" hidden></canvas><svg id="avatar-stickers" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="主角畫布上的裝飾品" hidden></svg></div></div></main><div class="drawing-toolbar" aria-label="畫畫工具" role="group">
   <div class="toolbar-paint">
     <button id="color-open" class="toolbar-button color-open" aria-label="選畫筆顏色" aria-haspopup="dialog"><span id="current-color" aria-hidden="true"></span></button>
     <button id="brush-summary" class="toolbar-button brush-open" aria-label="選工具" aria-haspopup="dialog"><span id="brush-icon" aria-hidden="true">🖍️</span><span id="brush-name" class="sr-only">彩色筆</span></button>
@@ -61,7 +61,7 @@
   </div>
   <div id="avatar-tools" class="toolbar-paint" hidden>
     <button id="avatar-color-open" type="button" class="toolbar-button color-open" aria-label="選主角畫筆顏色" aria-haspopup="dialog"><span id="avatar-current-color" aria-hidden="true"></span></button>
-    <button id="avatar-brush-open" type="button" class="toolbar-button brush-open" aria-label="選主角畫筆" aria-haspopup="dialog"><span aria-hidden="true">🖍️</span><span id="avatar-brush-name" class="sr-only">彩色筆</span></button>
+    <button id="avatar-brush-open" type="button" class="toolbar-button brush-open" aria-label="選主角畫筆" aria-haspopup="dialog"><span id="avatar-brush-icon" aria-hidden="true">🖍️</span><span id="avatar-brush-name" class="sr-only">彩色筆</span></button>
     <button id="avatar-open" type="button" class="toolbar-button" aria-label="主角衣櫃" aria-haspopup="dialog" hidden>👕</button>
   </div>
   <div class="toolbar-actions">
@@ -74,8 +74,7 @@
     </button>
     <button id="avatar-undo" type="button" class="toolbar-button" aria-label="復原主角筆跡" hidden>↶</button>
     <div id="reward-tray" class="reward-tray" role="group" aria-label="收集的裝飾品" hidden>
-      <p id="reward-empty"></p>
-      <div id="reward-inventory" hidden></div>
+      <div id="reward-inventory"></div>
     </div>
   </div>
 </div>
@@ -120,7 +119,7 @@
   <div id="size-options" class="sizes" role="group" aria-label="粗細選項"></div>
 </dialog>
 <dialog id="brush-picker" aria-label="選擇工具">
-  <div class="dialog-title"><h2 aria-label="畫畫工具"><span aria-hidden="true">🖍️</span></h2><button id="brush-close" class="close" aria-label="關閉工具選單">×</button></div>
+  <div class="dialog-title"><h2 aria-label="畫畫工具"><span id="brush-picker-icon" aria-hidden="true">🖍️</span></h2><button id="brush-close" class="close" aria-label="關閉工具選單">×</button></div>
   <div id="tools" class="tools" role="group" aria-label="工具種類"></div>
   <div id="stamp-options" class="stamp-options" role="group" aria-label="印章圖案" hidden></div>
 </dialog>

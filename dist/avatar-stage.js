@@ -4,7 +4,8 @@ import {closureSvgMarkup} from './number-patterns.js';
 import {getFillRegions} from './fill-regions.js';
 import {drawFills} from './fills.js';
 import {ORIGINAL_PAPER} from './paper.js';
-import {createMotionScene, drawMotionScene, motionFor, motionPartAt, transformSticker} from './reward-motion.js';
+import {busDepartureTime, createMotionScene, drawMotionScene, fruitBiteCycle, fruitBites, fruitBiteTimes, motionFor, motionPartAt, transformSticker} from './reward-motion.js';
+import {ghostScareTime, islandLoopDuration} from './island-motion.js';
 
 export const STAGE_W = 960;
 export const STAGE_H = 620;
@@ -135,6 +136,121 @@ function mixPosition(a,b,progress) {
   return {x:lerp(a.x,b.x,progress),y:lerp(a.y,b.y,progress)};
 }
 
+function rideIslandDragon(part, time, gear) {
+  const seat = transformSticker(part, {x:470,y:473}, time);
+  const elapsed = time - enterDuration;
+  const approach = smooth(elapsed / .62);
+  const mount = smooth((elapsed - .62) / 1.04);
+  const mounted = smooth((elapsed - 1.14) / .52);
+  const lift = (gear.shoes === 'spring' ? 68 : 46) * arc(mount);
+  return {
+    x:lerp(lerp(697, seat.x + 95, approach), seat.x, mount),
+    y:lerp(795, seat.y, mount) - lift,
+    size:.335, face:-1, anchorY:lerp(280, 212, mounted),
+    lean:seat.angle * Math.PI / 180 * mounted - .13 * arc(mount),
+    stride:.88 * sine(elapsed, 3.3) * (1 - mount),
+    glide:.36 * mounted, mounted,
+    gait:mounted > .85 ? 'ride' : mount > 0 ? 'hop' : 'run'
+  };
+}
+
+function escapeIslandGhost(time) {
+  const reaction = time % islandLoopDuration - ghostScareTime;
+  const leap = arc((reaction + .07) / .55);
+  const run = unit((reaction - .19) / 1.06);
+  const returnHome = unit((reaction - 3.35) / 2.0);
+  const fleeing = run > 0 && run < 1;
+  const returning = returnHome > 0 && returnHome < 1;
+  const distance = smooth(run) * (1 - smooth(returnHome));
+  const scared = smooth((reaction + .15) / .17) * (1 - smooth((reaction - 1.33) / .71));
+  const stride = fleeing ? sine(time, 4.4) : returning ? .57 * sine(time, 2.9) : 0;
+  return {
+    x:721 + 237 * distance,
+    y:793 + 55 * distance - 88 * leap - Math.max(0, stride) * 14,
+    size:.35, face:fleeing ? 1 : -1,
+    lean:.26 * Math.sin(Math.PI * run) + .20 * leap,
+    stride, scared, glide:.74 * scared,
+    crouch:scared * (1 - leap),
+    gait:fleeing || returning ? 'run' : leap > 0 ? 'hop' : 'idle'
+  };
+}
+
+function swimWithWhale(part, time) {
+  const whale = transformSticker(part, {x:499,y:523}, time);
+  const lap = (time - enterDuration) * Math.PI * 2 / 6.8;
+  const heading = Math.cos(lap);
+  return {
+    x:whale.x + 228 * Math.sin(lap),
+    y:whale.y + 57 + 42 * (1 - heading) / 2 + 11 * sine(time, 1.35),
+    size:.35, face:heading >= 0 ? 1 : -1, anchorY:160,
+    lean:1.35 * Math.tanh(3.7 * heading) + .07 * sine(time, 1.24),
+    stride:.56 * sine(time, 2.65), swim:1, swimStroke:sine(time, 1.24), gait:'swim'
+  };
+}
+
+function eatFruit(pattern, part, time) {
+  const phase = time % fruitBiteCycle;
+  const approach = smooth((phase - enterDuration) / .55);
+  const stepBack = smooth((phase - 4.92) / .78);
+  const nearFruit = approach * (1 - stepBack);
+  const stride = .66 * sine(time, 3.2) * Math.max(arc(approach), arc(stepBack));
+  const watermelon = pattern === 'watermelon';
+  const base = watermelon
+    ? {x:lerp(879, 789, nearFruit), y:lerp(235, 212, nearFruit)}
+    : {x:lerp(905, 860, nearFruit), y:lerp(675, 640, nearFruit)};
+  const pose = {...base, size:.35, face:-1, anchorY:113, stride, gait:'walk'};
+  const index = fruitBiteTimes.findIndex(bite => phase >= bite - .48 && phase < bite + .52);
+  if (index < 0) return pose;
+
+  const [x, y] = fruitBites[pattern][index];
+  const target = transformSticker(part, {x, y}, time);
+  const age = phase - fruitBiteTimes[index];
+  const up = smooth((age + .48) / .48);
+  const down = smooth((age - .04) / .48);
+  const reach = up * (1 - down);
+  return {
+    ...pose,
+    x:lerp(base.x, target.x, reach),
+    y:lerp(base.y, target.y, reach) - 26 * arc(up) - 13 * arc(down),
+    lean:(watermelon ? -1.06 : -.19) * reach, stride:.34 * reach, glide:.58 * reach, gait:'hop',
+    chew:age < 0 ? reach : (1 - down) * (.42 + .58 * Math.cos(age * 32) ** 2)
+  };
+}
+
+const busWindow = [[540,339],[661,339],[661,461],[540,461]];
+
+function rideBus(part, time) {
+  const peekAt = busDepartureTime - .41;
+  if (time < peekAt) {
+    const boarding = time - enterDuration;
+    const walk = smooth(boarding / .96);
+    const step = smooth((boarding - .90) / .64);
+    return {
+      x:lerp(lerp(475, 792, walk), 773, step),
+      y:lerp(793, 621, step) - 11 * arc(step),
+      size:.35, face:1, gait:step > 0 ? 'hop' : 'walk',
+      stride:.86 * sine(boarding, 3.45) * (1 - step),
+      glide:.45 * arc(step), opacity:1 - smooth((time - 2.46) / .28)
+    };
+  }
+  const peek = smooth((time - peekAt) / .56);
+  const finish = Math.max(0, time - busDepartureTime);
+  const framePoint = (x, y) => transformSticker(part, {x, y}, time);
+  const seat = framePoint(600.5 + 7 * sine(finish, .27), 400 + 128 * (1 - peek) + 3 * sine(finish, 1.06));
+  return {
+    x:seat.x, y:seat.y, anchorY:77, face:1, lean:seat.angle * Math.PI / 180,
+    window:busWindow.map(([x,y]) => framePoint(x,y)), headOnly:true, gait:'ride'
+  };
+}
+
+export function pictureInteractionPose(pattern, part, time, gear) {
+  if (pattern === 'island-dragon-clean') return rideIslandDragon(part, time, gear);
+  if (pattern === 'island-ghost-clean') return escapeIslandGhost(time);
+  if (pattern === 'ocean-friends-clean') return swimWithWhale(part, time);
+  if (pattern === 'bus-clean') return rideBus(part, time);
+  if (Object.hasOwn(fruitBites, pattern)) return eatFruit(pattern, part, time);
+}
+
 function flightOverPicture(t, loop, ground, scene, part) {
   const coordinates = scene.id==='sea-turtle-clean' ? [530,423] : scene.id==='longneck-clean' ? [590,353] : [570,405];
   const focus=landmark(part,t,...coordinates,pictureFor(scene.id));
@@ -261,7 +377,28 @@ function drawFrame(ctx, scene) {
   ctx.strokeStyle='#b2b7a5'; ctx.lineWidth=2.2; ctx.stroke();
 }
 
-export function drawActor(ctx, player, gear, ink, pose, t, outside = false) {
+function drawSwimBubbles(ctx, pose, time, size) {
+  const mouth = (pose.anchorY - 113) * size;
+  const x = pose.x + Math.sin(pose.lean) * mouth;
+  const y = pose.y - Math.cos(pose.lean) * mouth;
+  ctx.save();
+  ctx.fillStyle = '#d9f6fb';
+  ctx.strokeStyle = '#63b1c9';
+  ctx.lineWidth = size * 3.5;
+  for (let i = 0; i < 4; i++) {
+    const age = fract(time * .88 + i / 4);
+    const radius = size * (5 + age * 12);
+    ctx.globalAlpha = pose.swim * .82 * Math.sin(Math.PI * age);
+    ctx.beginPath();
+    ctx.arc(x - pose.face * age * 68 * size + sine(age + i * .2, 1) * size * 10,
+      y - age * 104 * size, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+export function drawActor(ctx, player, gear, ink, pose, t, outside = false, decorate) {
   ctx.save();
   if(outside) {
     const margin = new Path2D();
@@ -269,11 +406,21 @@ export function drawActor(ctx, player, gear, ink, pose, t, outside = false) {
     margin.roundRect(frame.x,frame.y,frame.width,frame.height,13);
     ctx.clip(margin,'evenodd');
   }
+  if (pose.window) {
+    ctx.beginPath();
+    ctx.moveTo(pose.window[0].x, pose.window[0].y);
+    for (const {x,y} of pose.window.slice(1)) ctx.lineTo(x,y);
+    ctx.closePath();
+    ctx.clip();
+  }
+  ctx.globalAlpha *= pose.opacity ?? 1;
   const size=pose.size ?? .326;
   const high=pose.gait==='hop' || pose.gait==='ride';
   const wing=gear.bag==='wingpack';
   const air=pose.airborne ?? 0;
-  if(air>.08) {
+  if (pose.swim) {
+    drawSwimBubbles(ctx, pose, t, size);
+  } else if(air>.08) {
     if(pose.shadowY!==undefined) ellipse(ctx,pose.x,pose.shadowY+2,26-10*air,3.6,'#263d4b21');
     const direction=pose.face??1;
     for(let i=1;i<=3;i++) {
@@ -281,11 +428,14 @@ export function drawActor(ctx, player, gear, ink, pose, t, outside = false) {
       ellipse(ctx,pose.x-direction*(25+i*10),pose.y+8+i*5,
         (4.8-i*.7)*shimmer,(4.8-i*.7)*shimmer,'#fff7d1b0');
     }
-  } else if (!pose.climb) ellipse(ctx,pose.x,pose.y+2,26*(high?.84:1),4.3,'#263d4b27');
+  } else if (!pose.climb && !pose.mounted && !pose.headOnly) {
+    const feetY = pose.y + (280 - (pose.anchorY ?? 280)) * size;
+    ellipse(ctx,pose.x,feetY+2,26*(high?.84:1),4.3,'#263d4b27');
+  }
   ctx.translate(pose.x,pose.y);
   ctx.rotate(pose.lean ?? 0);
   ctx.scale((pose.face??1)*size,size);
-  ctx.translate(-122,-280);
+  ctx.translate(-122,-(pose.anchorY ?? 280));
   const bag=itemById.get(gear.bag);
   const packWeight=gear.bag==='picnic' ? .69 : bag?.style==='back' && !wing ? .83 : 1;
   const steps=gear.pants==='jogger'?1.16:gear.pants==='denim'||gear.pants==='berryoveralls'?.84:1;
@@ -300,6 +450,20 @@ export function drawActor(ctx, player, gear, ink, pose, t, outside = false) {
     blink:pose.blink??fract(t*.313)>.974,
     crouch:(pose.crouch??0)+(gear.top==='hoodie'?.24*Math.max(pose.stride??0,0):0)
   });
+  decorate?.(ctx, pose.headOnly);
+  if (pose.scared > .24) {
+    ctx.save();
+    ctx.globalAlpha = pose.scared;
+    ctx.strokeStyle = '#a96140';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(173,57); ctx.lineTo(184,43);
+    ctx.moveTo(181,69); ctx.lineTo(197,63);
+    ctx.moveTo(181,82); ctx.lineTo(195,85);
+    ctx.stroke();
+    ctx.restore();
+  }
   if (gear.neck && waving>.65) {
     const pulse=1.5+3.3*unit(sine(t,1.8));
     ellipse(ctx,126,165,pulse,pulse,'#fff5b6');

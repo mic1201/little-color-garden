@@ -1,15 +1,19 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {brushes,stamps,updateBrushSummary} from './dist/brush-ui.js';
-const attrs={},summary={setAttribute(k,v){attrs[k]=v}},label={};
-for(const [id,,name]of brushes){
- updateBrushSummary(summary,label,id,'star');
+const attrs={},summary={setAttribute(k,v){attrs[k]=v}},label={},toolbarIcon={},pickerIcon={};
+for(const [id,icon,name]of brushes){
+ updateBrushSummary(summary,label,id,'star',toolbarIcon,pickerIcon);
  assert.equal(label.textContent,id==='stamp'?'星星印章':name);
+ assert.equal(toolbarIcon.textContent,id==='stamp'?stamps[0][1]:icon);
+ assert.equal(pickerIcon.textContent,toolbarIcon.textContent);
  assert.ok(attrs['aria-label'].includes(label.textContent));
 }
-for(const [id,,name] of stamps){
- updateBrushSummary(summary,label,'stamp',id);
+for(const [id,icon,name] of stamps){
+ updateBrushSummary(summary,label,'stamp',id,toolbarIcon,pickerIcon);
  assert.equal(label.textContent,name+'印章');
+ assert.equal(toolbarIcon.textContent,icon);
+ assert.equal(pickerIcon.textContent,icon);
  updateBrushSummary(summary,label,'eraser',id);assert.equal(label.textContent,'橡皮擦');
  updateBrushSummary(summary,label,'stamp',id);assert.equal(label.textContent,name+'印章');
 }

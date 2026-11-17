@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
 import {H, W} from './dist/engine.js';
 import {PAPER_REGION} from './dist/fills.js';
+import {getFillRegions} from './dist/fill-regions.js';
+import {paperMasks} from './dist/paper-masks.js';
 import {availablePatterns} from './dist/patterns.js';
 import {countPaintedArea, createPaintProgress, REWARD_THRESHOLD} from './dist/reward-progress.js';
-import {inkMotionOwners, motionFor, motionGeometry, motionPartAt, transformSticker} from './dist/reward-motion.js';
+import {busDepartureTime, fruitBiteCycle, fruitBites, fruitBiteTimes, inkMotionOwners, motionFor, motionGeometry, motionPartAt, transformSticker} from './dist/reward-motion.js';
 import {changeRewardCollection, chooseReward, rewardCollection, rewardExportMarkup} from './dist/rewards.js';
 import {stickers} from './dist/reward-stickers.js';
+import {enterDuration, pictureInteractionPose} from './dist/avatar-stage.js';
+import {ghostScareTime, islandLoopDuration} from './dist/island-motion.js';
+import {pictureInteraction, pictureInteractions} from './dist/picture-interactions.js';
 
 const regions = [{id: 'large', spans: [[10, 10, 204]]}, {id: 'small', spans: [[11, 10, 16]]}];
 const ink = new Uint8ClampedArray(W * 12 * 4);
@@ -27,7 +32,7 @@ assert.deepEqual(countPaintedArea(regions, fills, ink), {painted: 194, total: 20
 assert.equal(createPaintProgress()({pattern:'blank', strokes:[]}), null);
 
 const visible = availablePatterns();
-assert.equal(visible.filter(({id}) => id !== 'blank').length, 24);
+assert.equal(visible.filter(({id}) => id !== 'blank').length, 28);
 for (const {id} of visible) {
   if (id === 'blank') {
     assert.deepEqual(motionFor(id), []);
@@ -40,12 +45,105 @@ for (const {id} of visible) {
   for (const part of parts) {
     const [left, top, right, bottom] = part.rect;
     const sticker = {x:(left + right)/2, y:(top + bottom)/2};
-    const poses = [.4, .8, 1.16, 1.52, 2.05, 2.55].map(time => transformSticker(part, sticker, time));
+    const poses = [.4, .8, 1.16, 1.52, 2.05, 2.44, 2.55, 3.8, 5.2].map(time => transformSticker(part, sticker, time));
     assert(poses.every(({x,y}) => Number.isFinite(x) && Number.isFinite(y)), id);
     assert(poses.some(({x,y,angle,scaleX,scaleY}) => x !== sticker.x || y !== sticker.y || angle !== 0 || scaleX !== 1 || scaleY !== 1), id);
   }
 }
+for (const {id} of visible.filter(({category}) => category === 'island')) {
+  const regions = getFillRegions(id);
+  const measure = createPaintProgress();
+  assert.ok(regions.length >= 5, id);
+  assert.equal(measure({pattern:id, strokes:[], fills:[{region:PAPER_REGION}]}), 0);
+  assert.equal(measure({pattern:id, strokes:[], fills:regions.map(region => ({region:region.id}))}), 100);
+  const [part] = motionFor(id);
+  const [x, y] = regions[0].seeds[0];
+  const rest = transformSticker(part, {x, y}, 0);
+  if (id !== 'island-turtle-clean') {
+    const keyframes = [1.25, 4.42, 7.31, 11.42].map(time => transformSticker(part, {x, y}, time));
+    assert.equal(new Set(keyframes.map(frame => JSON.stringify(frame))).size, 4, id);
+    assert.ok(keyframes.every(frame => Math.hypot(frame.x - rest.x, frame.y - rest.y) > 1), id);
+    for (const time of [3.2, 5.8, 10, 13.6]) {
+      const frame = transformSticker(part, {x,y}, time);
+      assert.ok(['x','y','angle','scaleX','scaleY'].every(key => Math.abs(frame[key] - rest[key]) < 1e-9), id);
+    }
+  }
+  const [top, rows] = paperMasks[id];
+  for (let time = 0; time < 13.6; time += .1) {
+    for (let i = 0; i < rows.length; i += 5) {
+      for (const edge of rows[i]) {
+        const frame = transformSticker(part, {x:edge,y:top + i}, time);
+        assert.ok(frame.x > 8 && frame.x < W - 8 && frame.y > 8 && frame.y < H - 8, `${id} at ${time}`);
+      }
+    }
+  }
+}
+
+assert.equal(Object.keys(pictureInteractions).length,19);
+const parrot = motionFor('parrot-cute-clean');
+assert.equal(motionPartAt('parrot-cute-clean',parrot,{x:500,y:600}),0);
+assert.equal(motionPartAt('parrot-cute-clean',parrot,{x:500,y:750}),-1);
+for (const id of Object.keys(pictureInteractions)) {
+  const parts = motionFor(id);
+  const frames = [0,1.6,2.7,3.8,4.9,6.0,7.1].map(time => pictureInteraction(id,time,parts,transformSticker));
+  assert.deepEqual(frames[0].props,[]);
+  assert.ok(frames.some(frame => frame.props.length), id);
+  assert.ok(new Set(frames.map(({pose}) => JSON.stringify(pose))).size >= 3,id);
+  for(const {pose,props} of frames) {
+    assert.ok([pose.x,pose.y,pose.size,pose.stride].every(Number.isFinite),id);
+    assert.ok(props.every(prop => Number.isFinite(prop.x) && Number.isFinite(prop.y)),id);
+  }
+}
+
 const neck = motionFor('longneck-clean');
+const dragonId = 'island-dragon-clean';
+const dragon = motionFor(dragonId)[0];
+const approach = pictureInteractionPose(dragonId, dragon, enterDuration, {});
+assert.equal(approach.mounted, 0);
+assert.equal(approach.gait, 'run');
+for (const sample of [3, 4.4, 8.1, 11.7, 14.2]) {
+  const rider = pictureInteractionPose(dragonId, dragon, sample, {bag:'wingpack'});
+  const seat = transformSticker(dragon, {x:470,y:473}, sample);
+  assert.equal(rider.gait, 'ride');
+  assert.equal(rider.anchorY, 212);
+  assert.deepEqual({x:rider.x,y:rider.y}, {x:seat.x,y:seat.y});
+}
+const ghostId = 'island-ghost-clean';
+const ghost = motionFor(ghostId)[0];
+const waiting = pictureInteractionPose(ghostId, ghost, ghostScareTime - .7, {});
+const startled = pictureInteractionPose(ghostId, ghost, ghostScareTime + .14, {});
+const fleeing = pictureInteractionPose(ghostId, ghost, ghostScareTime + .81, {});
+assert.equal(waiting.scared, 0);
+assert.equal(startled.scared, 1);
+assert.ok(startled.y < waiting.y - 45);
+assert.equal(fleeing.gait, 'run');
+assert.ok(fleeing.x > waiting.x + 100 && fleeing.face === 1);
+assert.equal(pictureInteractionPose(ghostId, ghost, ghostScareTime + islandLoopDuration + .81, {}).scared, 1);
+
+const oceanId = 'ocean-friends-clean';
+const ocean = motionFor(oceanId)[0];
+const swimRight = pictureInteractionPose(oceanId, ocean, enterDuration + .65, {});
+const swimLeft = pictureInteractionPose(oceanId, ocean, enterDuration + 3.5, {bag:'wingpack'});
+assert.equal(swimRight.gait, 'swim');
+assert.equal(swimLeft.gait, 'swim');
+assert.ok(swimRight.lean > 1 && swimLeft.lean < -1);
+assert.equal(swimRight.face, 1);
+assert.equal(swimLeft.face, -1);
+assert.notEqual(swimRight.swimStroke, swimLeft.swimStroke);
+
+const busId = 'bus-clean';
+const [bus] = motionFor(busId);
+assert.equal(pictureInteractionPose(busId, bus, 1.8, {}).headOnly, undefined);
+assert.ok(pictureInteractionPose(busId, bus, 2.64, {}).opacity < .5);
+assert.deepEqual(bus.pose(0), bus.pose(busDepartureTime));
+for (const time of [busDepartureTime, 4.0, 5.3, 6.8]) {
+  const passenger = pictureInteractionPose(busId, bus, time, {hat:'rabbit-ears'});
+  assert.equal(passenger.headOnly, true);
+  assert.equal(passenger.window.length, 4);
+  assert.deepEqual(passenger.window[0], transformSticker(bus, {x:540,y:339}, time));
+  assert.deepEqual(passenger.window[2], transformSticker(bus, {x:661,y:461}, time));
+}
+
 assert.equal(motionPartAt('longneck-clean', neck, {x:642,y:174}), 0);
 assert.equal(motionPartAt('longneck-clean', neck, {x:252,y:735}), -1);
 assert.equal(motionPartAt('longneck-clean', neck, {x:30,y:32}), -1);
@@ -60,10 +158,29 @@ const airborne = rabbit.pose(1.42);
 const landing = rabbit.pose(1.82);
 assert(airborne.dy < -100 && airborne.dx > takeoff.dx);
 assert(landing.scaleY > takeoff.scaleY && landing.dx > airborne.dx);
-const apple = motionFor('apple-clean')[0];
-assert.deepEqual([0,.9,1.62,2.5,4.4].map(time => apple.cut(time).length), [0,1,2,3,0]);
-assert.equal(transformSticker(apple, {x:761,y:461}, 2.5).hidden, true);
-assert.equal(transformSticker(apple, {x:761,y:461}, 4.4).hidden, false);
+for (const [id, bites] of Object.entries(fruitBites)) {
+  const [fruit] = motionFor(id);
+  const reset = fruitBiteCycle - .1;
+  assert.deepEqual([0,...fruitBiteTimes,reset].map(time => fruit.cut(time).length), [0,1,2,3,0]);
+  for (const [index, [x, y]] of bites.entries()) {
+    const time = fruitBiteTimes[index];
+    const target = transformSticker(fruit, {x, y}, time);
+    const actor = pictureInteractionPose(id, fruit, time, {});
+    assert.deepEqual({x:actor.x,y:actor.y}, {x:target.x,y:target.y});
+    assert.equal(actor.anchorY, 113);
+    assert.equal(actor.chew, 1);
+    assert.equal(target.hidden, true);
+    assert.equal(transformSticker(fruit, {x,y}, reset).hidden, false);
+  }
+}
+
+const [watermelonFlesh, watermelonRind] = getFillRegions('watermelon');
+for (const [x, y, radius] of fruitBites.watermelon) {
+  const distanceToSpan = ([row, start, end]) =>
+    Math.hypot(x - Math.max(start, Math.min(end - 1, x)), y - row);
+  assert.ok(watermelonFlesh.spans.some(span => distanceToSpan(span) < radius));
+  assert.ok(watermelonRind.spans.every(span => distanceToSpan(span) > radius + 7));
+}
 const halloween = motionFor('halloween-photo-v4-clean');
 assert.equal(motionPartAt('halloween-photo-v4-clean', halloween, {x:710,y:710}), -1);
 assert.equal(motionPartAt('halloween-photo-v4-clean', halloween, {x:699,y:592}), 1);
@@ -118,4 +235,4 @@ const picked = [];
 for (let i = 0; i < 30; i++) picked.push(chooseReward(picked, () => .79));
 assert.equal(new Set(picked).size, 30);
 assert.equal(chooseReward(picked), null);
-console.log(`PASS rewards: ${REWARD_THRESHOLD}% area, whole outlines and crossing ink, 24 moving scenes, and 30 unique collectible stickers`);
+console.log(`PASS rewards: ${REWARD_THRESHOLD}% area, whole outlines and crossing ink, 28 moving scenes, and 30 unique collectible stickers`);

@@ -422,7 +422,7 @@ function drawHairBehind(ctx,person) {
   }
 }
 
-function drawHead(ctx,person,ink,blink) {
+function drawHead(ctx,person,ink,blink,scared,chew) {
   const hair = person==='girl'
     ? 'M76 99Q67 81 78 60Q88 36 120 40Q164 37 170 78L164 99Q158 83 150 75Q135 78 124 65Q113 81 91 79L82 95Z'
     : 'M76 90L74 68Q84 51 101 52Q113 38 132 46Q154 45 164 65L165 93Q158 81 153 75Q139 79 128 64Q113 78 98 72Q91 82 83 82Z';
@@ -436,12 +436,14 @@ function drawHead(ctx,person,ink,blink) {
   paintMarks(ctx,hair,ink);
   line(ctx,hair);
   if(person==='girl') line(ctx,'M145 59L154 64','#f5c87b',4);
-  const eyeHeight=blink ? 1.2 : 4.3;
+  const eyeHeight=scared > .24 ? 4.3 + 2.3 * scared : blink ? 1.2 : 4.3;
   oval(ctx,104,94,3.7,eyeHeight,LINE);
   oval(ctx,139,94,3.7,eyeHeight,LINE);
   oval(ctx,95,106,6.5,3.4,'#f3a19b');
   oval(ctx,148,106,6.5,3.4,'#f3a19b');
-  line(ctx,'M115 111Q122 119 130 111',LINE,2.4);
+  if (scared > .24) oval(ctx,122,113,4,3.3+1.8*scared,LINE);
+  else if (chew > .08) oval(ctx,122,113,4+2*chew,1.5+4.2*chew,LINE);
+  else line(ctx,'M115 111Q122 119 130 111',LINE,2.4);
 }
 
 function arm(ctx,x,y,angle,top,person,glove,inkFor) {
@@ -457,6 +459,16 @@ function arm(ctx,x,y,angle,top,person,glove,inkFor) {
   ctx.restore();
 }
 
+function drawHeadWithHat(ctx, person, hat, inkFor, {headTilt=0, blink=false, scared=0, chew=0, earBounce=0}) {
+  ctx.save();
+  ctx.translate(121,133);
+  ctx.rotate(headTilt);
+  ctx.translate(-121,-133);
+  drawHead(ctx,person,inkFor(),blink,scared,chew);
+  drawHat(ctx,hat,earBounce,inkFor(hat));
+  ctx.restore();
+}
+
 export function drawAvatar(ctx, person, equipped, ink, pose = {}, onSurface) {
   const worn = slot => itemById.get(equipped[slot]);
   const inkFor = piece => {
@@ -464,12 +476,19 @@ export function drawAvatar(ctx, person, equipped, ink, pose = {}, onSurface) {
     onSurface?.(surface);
     return ink instanceof Map ? ink.get(surface) : ink;
   };
-  const {stride=0, climb=0, wave=0, glide=0, bagSwing=0, headTilt=0, blink=false, crouch=0, flap=0, earBounce=0} = pose;
+  const hat = worn('hat');
+  if (pose.headOnly) {
+    drawHeadWithHat(ctx, person, hat, inkFor, pose);
+    return;
+  }
+  const {stride=0, climb=0, wave=0, glide=0, bagSwing=0, crouch=0, flap=0,
+    mounted=0, swim=0, swimStroke=0} = pose;
   const top = worn('top'), pants = worn('pants'), gloves = worn('gloves'), shoes = worn('shoes'), bag = worn('bag');
   for (const [side,x] of [[-1,105],[1,135]]) {
     ctx.save();
     ctx.translate(x,207);
-    ctx.rotate(side*stride*.68);
+    ctx.rotate(side * (stride * .68 - mounted * .43));
+    if (mounted) ctx.scale(1, 1 - mounted * .32);
     ctx.translate(-x,-207);
     const leg = `M${x-9} 220H${x+9}V269H${x-9}Z`;
     paint(ctx,leg,SKIN,LINE,3.4,inkFor());
@@ -480,21 +499,17 @@ export function drawAvatar(ctx, person, equipped, ink, pose = {}, onSurface) {
   ctx.save();
   ctx.translate(0,crouch*7);
   if(bag?.style==='back') drawPack(ctx,bag,bagSwing,flap,inkFor(bag));
-  arm(ctx,88,151,.28 - stride*.52 + climb*(1.45 + .68*stride) + glide*.96,top,person,gloves,inkFor);
-  arm(ctx,152,151,-.28 + stride*.52 - climb*(1.45 - .68*stride) - Math.max(glide*.96,wave*(2.1+.3*stride)),top,person,gloves,inkFor);
+  const leftArm = .28 - stride*.52 + climb*(1.45 + .68*stride) + glide*.96;
+  const rightArm = -.28 + stride*.52 - climb*(1.45 - .68*stride) - Math.max(glide*.96,wave*(2.1+.3*stride));
+  arm(ctx,88,151,pose.leftArm ?? leftArm*(1-swim) + swim*(1.7+1.03*swimStroke),top,person,gloves,inkFor);
+  arm(ctx,152,151,pose.rightArm ?? rightArm*(1-swim) - swim*(1.7-1.03*swimStroke),top,person,gloves,inkFor);
   paint(ctx,'M112 121H132V140Q123 147 112 140Z',SKIN,LINE,3.4,inkFor());
   drawTop(ctx,top,person,inkFor(top));
   drawSuspenders(ctx,pants,inkFor(pants));
   drawCape(ctx,top,bagSwing,Boolean(worn('neck')),inkFor(top));
   drawNecklace(ctx,worn('neck'),inkFor(worn('neck')));
   if(bag?.style==='sling') drawSling(ctx,bag,bagSwing,inkFor(bag));
-  ctx.save();
-  ctx.translate(121,133);
-  ctx.rotate(headTilt);
-  ctx.translate(-121,-133);
-  drawHead(ctx,person,inkFor(),blink);
-  drawHat(ctx,worn('hat'),earBounce,inkFor(worn('hat')));
-  ctx.restore();
+  drawHeadWithHat(ctx, person, hat, inkFor, pose);
   ctx.restore();
 }
 

@@ -1,6 +1,8 @@
 import {backgroundColor, H, W} from './engine.js';
 import {fillPaint, PAPER_REGION} from './fills.js';
 import {paperMasks} from './paper-masks.js';
+import {islandMotion} from './island-motion.js';
+import {interactionArtwork, pictureActionTime} from './picture-interactions.js';
 
 const oscillate = (t, period) => Math.sin(t * 2 * Math.PI / period);
 const bounce = (t, period) => Math.max(0, oscillate(t, period)) ** 2;
@@ -47,22 +49,23 @@ const travelAndReturn = (t, period, reach) => {
   return reach * (ease(phase * 2) - ease((phase - .52) / .48));
 };
 
-const appleBiteTimes = [.82, 1.59, 2.34];
-const appleBites = [[802,400,54],[800,461,58],[802,519,55]];
-function appleCut(t) {
-  const phase = t % 5;
-  return phase < 4.15 ? appleBites.filter((_, index) => phase >= appleBiteTimes[index]) : [];
-}
+export const busDepartureTime = 3.15;
+export const fruitBiteTimes = [2.23, 3.23, 4.23];
+export const fruitBiteCycle = 6.25;
+export const fruitBites = {
+  'apple-clean': [[802,519,55],[800,461,58],[802,400,54]],
+  watermelon: [[694,314,50],[633,314,52],[572,314,50]]
+};
+const fruitReset = 5.45;
 
-function appleCrumbs(ctx, t) {
-  const phase = t % 5;
-  appleBites.forEach(([x, y], index) => {
-    const age = phase - appleBiteTimes[index];
+function fruitCrumbs(ctx, phase, bites) {
+  bites.forEach(([x, y], index) => {
+    const age = phase - fruitBiteTimes[index];
     if (age < 0 || age >= .62) return;
     ctx.globalAlpha = 1 - age / .62;
     for (let i = 0; i < 4; i++) {
       ctx.save();
-      ctx.translate(x - 33 + age * (62 + i * 23), y + (i - 1.5) * 10 - age * (104 - i * 18) + 146 * age * age);
+      ctx.translate(x - 20 + age * (62 + i * 23), y + (i - 1.5) * 10 - age * (104 - i * 18) + 146 * age * age);
       ctx.rotate(i + age * 6);
       ctx.fillStyle = i % 2 ? '#ffe3a3' : '#f3a78f';
       ctx.fillRect(-5, -4, 11 - i, 8);
@@ -70,6 +73,25 @@ function appleCrumbs(ctx, t) {
     }
   });
   ctx.globalAlpha = 1;
+}
+
+function fruitScene(pattern, rect, pivot) {
+  const bites = fruitBites[pattern];
+  return [{
+    rect,
+    pose(t) {
+      const phase = t % fruitBiteCycle;
+      const chew = fruitBiteTimes.reduce((total, start) => total + arc(interval(phase, start, start + .32)), 0);
+      const reset = arc(interval(phase, fruitReset, fruitReset + .55));
+      return {dy:-11 * chew - 26 * reset, scaleX:1 + .035 * chew,
+        scaleY:1 - .055 * chew + .045 * reset, pivot};
+    },
+    cut(t) {
+      const phase = t % fruitBiteCycle;
+      return phase < fruitReset ? bites.filter((_, index) => phase >= fruitBiteTimes[index]) : [];
+    },
+    detail: (ctx, t) => fruitCrumbs(ctx, t % fruitBiteCycle, bites)
+  }];
 }
 
 function bubbles(ctx, t, [x, y], count = 5) {
@@ -188,19 +210,8 @@ const scenes = {
     offset: (x, t) => ({y: 34 * unit((500 - x) / 290) * bounce(t, 2.45)}),
     pose: t => ({dx: -23 * swell(t, 4.9), dy: -12 * bounce(t, .87)})
   }],
-  'apple-clean': [{
-    ...wave([197,102,806,778], t => {
-      const time = t % 5;
-      const chew = appleBiteTimes.reduce((total, start) => total + arc(interval(time, start, start + .32)), 0);
-      const reset = arc(interval(time, 4.15, 4.7));
-      return {dy: -11 * chew - 26 * reset, scaleX: 1 + .035 * chew, scaleY: 1 - .055 * chew + .045 * reset, pivot: [500,753]};
-    }),
-    cut: appleCut,
-    detail: appleCrumbs
-  }],
-  watermelon: [wave([162,303,840,806], t => ({
-    angle: 18 * oscillate(t, 3.35), dy: -32 * swell(t, 1.675), pivot: [500,739]
-  }))],
+  'apple-clean': fruitScene('apple-clean', [197,102,806,778], [500,753]),
+  watermelon: fruitScene('watermelon', [162,303,840,806], [500,739]),
   'princess-dress-clean': [{
     rect: [230,92,772,840], axis: 'y',
     offset: (y, t) => ({x: 27 * Math.sin(Math.PI * unit((y - 490) / 710)) * oscillate(t, 3.7)}),
@@ -210,14 +221,17 @@ const scenes = {
     ...wave([180,45,827,797], t => ({scaleY: 1 + .012 * swell(t, 4.7), pivot: [500,780]})),
     detail: litWindows([[292,504,33,47],[500,414,36,48],[708,504,33,47]])
   }],
-  'bus-clean': [wave([128,255,884,772], t => ({
-    dx: travelAndReturn(t, 4.4, 88), dy: -7 * bounce(t, .52), angle: .75 * oscillate(t, .52), pivot: [500,735]
-  }))],
+  'bus-clean': [wave([128,255,884,772], t => {
+    const driving = Math.max(0, t - busDepartureTime);
+    return {dx:travelAndReturn(driving, 4.4, 88), dy:-7 * bounce(driving, .52),
+      angle:.75 * oscillate(driving, .52), pivot:[500,735]};
+  })],
   sailboat: [wave([156,93,845,774], t => ({
     dx: 25 * oscillate(t, 4.4), dy: -37 * swell(t, 2.2), angle: 11 * oscillate(t, 4.4), pivot: [500,679]
   }))],
   'parrot-cute-clean': [{
     rect: [279,91,721,727], axis: 'x',
+    fixedBelow:732,
     offset: (x,t) => ({y: -36 * unit((Math.abs(x - 500) - 90) / 120) * bounce(t,.59)}),
     pose: t => {
       const air = arc(interval(t % 4.1, .49, 2.97));
@@ -228,6 +242,7 @@ const scenes = {
     wave([334,207,665,741], t => rabbitHop(t, 70, [500,722])),
     cutout(wave([740,346,908,560], t => ({scaleX: 1 + .15 * swell(t, 4), scaleY: 1 + .1 * swell(t, 4), pivot: [828,550]})),
       [[740,346],[908,346],[908,560],[822,560],[822,537],[740,537]]),
+    wave([720,543,826,722], () => ({}))
   ],
   'ocean-friends-clean': [
     {...wave([270,230,759,535], t => ({dx: 43 * oscillate(t, 4.1), dy: -42 * swell(t, 4.1), angle: 8 * oscillate(t, 4.1), pivot: [500,410]})),
@@ -252,9 +267,22 @@ const scenes = {
   ]
 };
 
+const coordinatedScenes = Object.fromEntries(Object.entries(interactionArtwork).map(([id, rule]) => {
+  const parts = scenes[id] ?? islandMotion[id];
+  const visualTime = t => rule.time ? rule.time(pictureActionTime(t)) : t;
+  return [id, parts.map((part, index) => ({
+    ...part,
+    axis:rule.axis ?? part.axis,
+    pose: t => ({...part.pose?.(visualTime(t)), ...rule.pose?.(pictureActionTime(t), index)}),
+    offset: rule.axis === false ? undefined : rule.offset ? (position,t) => rule.offset(position,pictureActionTime(t))
+      : part.offset && ((position,t) => part.offset(position,visualTime(t))),
+    detail:rule.detail === false || !part.detail ? undefined : (ctx,t) => part.detail(ctx,visualTime(t))
+  }))];
+}));
+
 export function motionFor(pattern) {
   if (!paperMasks[pattern]) return [];
-  return scenes[pattern] ?? [dance([0,0,W,H], 3.2, 14, 14, 2, [500,620])];
+  return coordinatedScenes[pattern] ?? scenes[pattern] ?? islandMotion[pattern] ?? [dance([0,0,W,H], 3.2, 14, 14, 2, [500,620])];
 }
 
 const PIXELS = W * H;
@@ -324,7 +352,11 @@ export function motionGeometry(pattern, parts) {
     }
     const winner = coverage.indexOf(Math.max(...coverage));
     const owner = coverage[winner] * 2 > length ? winner + 1 : 255;
-    for (let i = 0; i < length; i++) owners[pixels[i]] = owner;
+    const fixedBelow = parts[winner].fixedBelow ?? H;
+    for (let i = 0; i < length; i++) {
+      const pixel = pixels[i];
+      owners[pixel] = pixel >= fixedBelow * W ? 255 : owner;
+    }
   });
   // 255 marks a static component. Padding can take empty edge pixels only.
   const padded = owners.slice();

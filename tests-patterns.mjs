@@ -5,11 +5,12 @@ const oldSource=execFileSync('git',['show','67730c02b9a5b0deb8b1c7ec9248f4a6c8f0
 const old=await import('data:text/javascript;base64,'+Buffer.from(oldSource).toString('base64'));
 assert.equal(patterns.filter(p=>!p.id.endsWith("-clean")).length,26);
 assert.equal(new Set(patterns.map(p=>p.id)).size,patterns.length);
-assert.equal(patternCategories.length,6);
+assert.equal(patternCategories.length,7);
+assert.equal(availablePatterns().filter(({category})=>category==='island').length,4);
 for(const p of old.patterns){const n=patterns.find(n=>n.id===p.id);for(const key of ['id','name','icon','shapes'])assert.equal(n[key],p[key]);assert.equal(svgMarkup(p.id),old.svgMarkup(p.id));}
 for(const c of patternCategories){assert.ok(patterns.filter(p=>p.category===c.id&&!old.patterns.some(o=>o.id===p.id)).length>=(c.id==='animals'?3:2));}
 for(const p of patterns){assert.ok(!/<(?:script|image|foreignObject|rect)\b|\bon\w+=|\bhref=|fill=/i.test(p.shapes.replace(/<circle cx="[0-9]+" cy="[0-9]+" r="[0-9]+" fill="#37424c" stroke="none"\/>/g,'')));assert.ok(svgMarkup(p.id).includes('fill="none"'));}
-console.log('Pattern preservation,13original additions,6categories and safe transparent SVG checks passed');
+console.log('Original patterns preserved, four island coloring pages available, and safe transparent SVG checks passed');
 
 for(const id of ['halloween-photo','triceratops','rabbit-garden']){
   assert(isLegacyPattern(id+'-clean'));
