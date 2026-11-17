@@ -1,7 +1,6 @@
 import {AVATAR_W, AVATAR_H, drawAvatar, drawWardrobeItem, itemById, makeAvatarInk, restoreOutfit, wardrobe} from './avatar-art.js';
-import {drawActor, enterDuration, frame, insidePose, patrolPose, sceneById, stageToPicture} from './avatar-stage.js';
+import {drawActor, enterDuration, insidePose, patrolPose, patrolTrack, sceneById, stageToPicture} from './avatar-stage.js';
 import {ORIGINAL_PAPER} from './paper.js';
-import {getFillRegions} from './fill-regions.js';
 import {transformSticker} from './reward-motion.js';
 
 const KEY = 'little-color-garden-avatar-v1';
@@ -30,34 +29,13 @@ export function restoreAvatar(saved) {
   return {person, profiles, editorOpen: Boolean(person && saved?.editorOpen !== false)};
 }
 
-export function avatarBoundaries(pattern, area, {width, height}) {
-  const regions = getFillRegions(pattern);
-  const bounds = regions.length
-    ? regions.reduce(([left, top, right, bottom], {bounds: [x1, y1, x2, y2]}) =>
-      [Math.min(left,x1), Math.min(top,y1), Math.max(right,x2), Math.max(bottom,y2)], [Infinity, Infinity, -Infinity, -Infinity])
-    : [240, 230, 760, 670];
-  const toX = x => (x - area.x) * width / area.width;
-  const toY = y => (y - area.y) * height / area.height;
-  const x = limit(toX(bounds[0]) - 5, 0, width);
-  const y = limit(toY(bounds[1]) - 5, 0, height);
-  return {x, y, width: limit(toX(bounds[2]) + 5, x, width) - x,
-    height: limit(toY(bounds[3]) + 5, y, height) - y};
-}
-
-function outsidePosition(pose, rect, extent) {
-  const size = (pose.size ?? .326) * limit(Math.min(extent.width, extent.height) / 930, .31, .53);
-  const half = size * 97;
-  const top = size * 284;
-  const right = rect.x + rect.width;
-  const edge = frame.x + frame.width;
-  const bottom = rect.y + rect.height;
-  let x = lerpRange(pose.x, frame.x, edge, rect.x, right);
-  if (pose.x < frame.x) x = lerpRange(pose.x, 79, frame.x, rect.x - half - 5, rect.x);
-  if (pose.x > edge) x = lerpRange(pose.x, edge, 881, right, right + half + 5);
-  const y = pose.y <= frame.y ? rect.y - 5
-    : lerpRange(pose.y, frame.y, frame.y + frame.height, rect.y, bottom) +
-      lerpRange(pose.y, frame.y + frame.height, 603, 0, top + 7);
-  return {...pose, x:limit(x, half, extent.width - half), y:limit(y, top, extent.height - 4), size};
+export function outsidePosition(pose, {width, height}) {
+  const size = (pose.size ?? .326) * limit(Math.min(width, height) / 930, .31, .53);
+  const side = Math.min(width / 2, size * 125 + 6);
+  const top = Math.min(height / 2, size * 284 + 6);
+  const x = lerpRange(pose.x, patrolTrack.left, patrolTrack.right, side, width - side);
+  const y = lerpRange(pose.y, patrolTrack.top, patrolTrack.bottom, top, height - 6);
+  return {...pose, x, y, size};
 }
 
 function genericPose(part, t, gear) {
@@ -102,7 +80,7 @@ function itemIcon(piece, size = 72) {
   return canvas;
 }
 
-export function createGameAvatar({board, getPattern, onEditorChange}) {
+export function createGameAvatar({board, onEditorChange}) {
   const $ = selector => document.querySelector(selector);
   let stored;
   try { stored = JSON.parse(localStorage.getItem(KEY)); } catch { /* Start with a fresh character. */ }
@@ -137,7 +115,6 @@ export function createGameAvatar({board, getPattern, onEditorChange}) {
   let pointer;
   let area = ORIGINAL_PAPER;
   let rect;
-  let boundary;
   let ratio;
   let frameId = 0;
   let last;
@@ -155,19 +132,11 @@ export function createGameAvatar({board, getPattern, onEditorChange}) {
     catch { status.textContent = '主角暫存空間不足，這次造型會先保留在畫面上。'; }
   }
 
-  function drawPatrol(pose, time, outside) {
+  function drawOnArtwork(pose, time) {
     if (!state.person || !rect) return;
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
-    ctx.save();
-    if (outside) {
-      ctx.beginPath();
-      ctx.rect(0, 0, rect.width, rect.height);
-      ctx.rect(boundary.x, boundary.y, boundary.width, boundary.height);
-      ctx.clip('evenodd');
-    }
     drawActor(ctx, state.person, gear, ink, pose, time);
-    ctx.restore();
   }
 
   function outsideFrame(now) {
@@ -175,7 +144,7 @@ export function createGameAvatar({board, getPattern, onEditorChange}) {
     if (editing || playing || document.hidden || chooser.open || !rect) return;
     if (last !== undefined && !reduced.matches) elapsed += Math.min(.06, (now - last) / 1000);
     last = now;
-    drawPatrol(outsidePosition(patrolPose(elapsed, gear), boundary, rect), elapsed, true);
+    drawOnArtwork(outsidePosition(patrolPose(elapsed, gear), rect), elapsed);
     if (!reduced.matches) schedulePatrol();
   }
 
@@ -484,7 +453,6 @@ export function createGameAvatar({board, getPattern, onEditorChange}) {
       area = nextArea;
       const bounds = board.getBoundingClientRect();
       rect = {x:0, y:0, width:Math.max(1,bounds.width), height:Math.max(1,bounds.height)};
-      boundary = avatarBoundaries(getPattern(), area, rect);
       ratio = Math.min(1.8, window.devicePixelRatio || 1);
       const width = Math.round(rect.width * ratio);
       const height = Math.round(rect.height * ratio);
@@ -513,7 +481,7 @@ export function createGameAvatar({board, getPattern, onEditorChange}) {
       if (!rect || !state.person || editing) return;
       const pose = insidePosition(pattern, part, time, gear, rect, area);
       if (time < enterDuration) {
-        const start = outsidePosition(entry, boundary, rect);
+        const start = outsidePosition(entry, rect);
         const u = time / enterDuration;
         const travel = u * u * (3 - 2 * u);
         const wing = gear.bag === 'wingpack';
@@ -526,7 +494,7 @@ export function createGameAvatar({board, getPattern, onEditorChange}) {
         pose.airborne = wing ? rise : 0;
         pose.stride = .75 * Math.sin(time * 19);
       }
-      drawPatrol(pose, time, false);
+      drawOnArtwork(pose, time);
     }
   };
 }

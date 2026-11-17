@@ -11,7 +11,7 @@ export const STAGE_H = 620;
 export const frame = {x:134,y:112,width:692,height:405};
 const picture = {x:215,y:66,scale:.53};
 const rabbitPicture = {x:290,y:168,scale:.38};
-const TRACK = {left:79,right:881,top:105,bottom:603};
+export const patrolTrack = {left:79,right:881,top:105,bottom:603};
 
 function pictureFor(sceneId) {
   return sceneId==='rabbit-clean' ? rabbitPicture : picture;
@@ -120,10 +120,10 @@ export function patrolPose(t, gear) {
   const pace = spring ? 2.15 : skates ? 1.22 : gear.bag === 'picnic' ? 1.65 : 1.9;
   const gait = sine(t,pace);
   const lift = (spring?11:gear.shoes==='rabbitslippers'?8:skates?1.6:4) * Math.max(0,gait);
-  if(phase<walk) return {x:lerp(TRACK.left,TRACK.right,phase/walk),y:TRACK.bottom-lift,face:1,stride:gait,gait:'walk'};
-  if(phase<walk+climb) return {x:TRACK.right,y:lerp(TRACK.bottom,TRACK.top,(phase-walk)/climb),face:-1,lean:-.19,stride:gait*.9,climb:.92,gait:'climb'};
-  if(phase<2*walk+climb) return {x:lerp(TRACK.right,TRACK.left,(phase-walk-climb)/walk),y:TRACK.top-lift,face:-1,stride:gait,gait:'walk'};
-  return {x:TRACK.left,y:lerp(TRACK.top,TRACK.bottom,(phase-2*walk-climb)/climb),face:1,lean:.19,stride:gait*.9,climb:.92,gait:'climb'};
+  if(phase<walk) return {x:lerp(patrolTrack.left,patrolTrack.right,phase/walk),y:patrolTrack.bottom-lift,face:1,stride:gait,gait:'walk'};
+  if(phase<walk+climb) return {x:patrolTrack.right,y:lerp(patrolTrack.bottom,patrolTrack.top,(phase-walk)/climb),face:-1,lean:-.19,stride:gait*.9,climb:.92,gait:'climb'};
+  if(phase<2*walk+climb) return {x:lerp(patrolTrack.right,patrolTrack.left,(phase-walk-climb)/walk),y:patrolTrack.top-lift,face:-1,stride:gait,gait:'walk'};
+  return {x:patrolTrack.left,y:lerp(patrolTrack.top,patrolTrack.bottom,(phase-2*walk-climb)/climb),face:1,lean:.19,stride:gait*.9,climb:.92,gait:'climb'};
 }
 
 function landmark(part,t,x,y,layout=picture) {
@@ -248,7 +248,7 @@ function drawFrame(ctx, scene) {
   ctx.lineWidth=2;
   ctx.setLineDash([3,10]);
   ctx.beginPath();
-  ctx.roundRect(TRACK.left,TRACK.top,TRACK.right-TRACK.left,TRACK.bottom-TRACK.top,19);
+  ctx.roundRect(patrolTrack.left,patrolTrack.top,patrolTrack.right-patrolTrack.left,patrolTrack.bottom-patrolTrack.top,19);
   ctx.stroke();
   ctx.setLineDash([]);
   ctx.fillStyle='#82928962';

@@ -118,6 +118,15 @@ main, .art-space, .paper-frame { min-width: 0; min-height: 0; height: 100%; }
 .size { width: 100%; background: #f9f6ef; }
 .size span { display: block; border-radius: 50%; background: #5b6a65; }
 .size[aria-pressed=true] { border-color: var(--selected); background: #e1ecdf; }
+#size-open { display: none; }
+.size-icon { display: flex; align-items: center; gap: 3px; }
+.size-icon i { display: block; width: 6px; aspect-ratio: 1; border-radius: 50%; background: #5b6a65; opacity: .42; }
+.size-icon i:nth-child(2) { width: 10px; }
+.size-icon i:nth-child(3) { width: 14px; }
+#size-open[data-size="9"] i:nth-child(1),
+#size-open[data-size="20"] i:nth-child(2),
+#size-open[data-size="38"] i:nth-child(3) { opacity: 1; }
+#size-picker { width: min(320px, calc(100% - 24px)); }
 .storage-warning {
   position: fixed;
   right: max(10px, env(safe-area-inset-right));
@@ -512,6 +521,7 @@ p { line-height: 1.62; }
 .reward-item[data-arriving] { opacity: 0; pointer-events: none; }
 
 .app.is-native .paper-frame { position: relative; border-radius: 0; box-shadow: none; }
+.app.is-native :is(#reward-hud, #reward-celebration) { z-index: 2; }
 #avatar-track, #avatar-portrait {
   position: absolute;
   inset: 0;
@@ -578,15 +588,46 @@ p { line-height: 1.62; }
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-rows: minmax(0, 1fr);
   }
-  .app.is-native .drawing-toolbar { width: 154px; grid-template-columns: minmax(0, 1fr); align-self: center; }
-  .app.is-native .toolbar-paint { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app.is-native .drawing-toolbar {
+    --tool-height: clamp(44px, calc((100dvh - max(8px, env(safe-area-inset-top)) - max(8px, env(safe-area-inset-bottom)) - 46px) / 8), 59px);
+    width: 66px;
+    grid-template-columns: minmax(0, 1fr);
+    align-self: center;
+    gap: 7px;
+  }
+  .app.is-native .toolbar-paint,
+  .app.is-native #avatar-tools,
   .app.is-native .toolbar-actions,
-  .app.is-native .toolbar-actions:has(#reward-open:not([hidden])) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .app.is-native .sizes { grid-column: 1 / -1; }
+  .app.is-native .toolbar-actions:has(#reward-open:not([hidden])) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .app.is-native #sizes { display: none; }
+  .app.is-native #size-open { display: grid; }
+  .app.is-native .toolbar-button { height: var(--tool-height); font-size: 30px; }
+  .app.is-native .toolbar-button svg { width: 28px; height: 28px; }
+  .app.is-native :is(#current-color, #avatar-current-color) { width: 31px; height: 31px; }
   .app.is-native .reward-tray {
     inset: auto calc(100% + 8px) 0 auto;
     width: min(290px, 50vw);
   }
+}
+
+@media (orientation: landscape) and (max-height: 415px) {
+  .app.is-native .drawing-toolbar {
+    --tool-height: 44px;
+    width: 103px;
+    padding: 4px;
+    gap: 5px;
+  }
+  .app.is-native .toolbar-paint,
+  .app.is-native .toolbar-actions,
+  .app.is-native .toolbar-actions:has(#reward-open:not([hidden])) { gap: 3px; }
+  .app.is-native .toolbar-actions,
+  .app.is-native .toolbar-actions:has(#reward-open:not([hidden])) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .app.is-native #pattern-open { grid-column: 1 / -1; }
 }
 
 .avatar-wardrobe-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 9px 0 3px; }

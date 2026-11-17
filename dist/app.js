@@ -94,7 +94,37 @@ for (const [id,icon,name] of stamps) {
   };
   stampOptions.append(button);
 }
-for(const [n,label,px]of [[9,'細筆',5],[20,'中筆',10],[38,'粗筆',17]]){const b=document.createElement('button');b.className='size';b.innerHTML=`<span style="width:${px}px;height:${px}px"></span>`;b.setAttribute('aria-label',label);b.setAttribute('aria-pressed',String(n===size));b.onclick=()=>{finish();size=n;document.querySelectorAll('.size').forEach(x=>x.setAttribute('aria-pressed',String(x===b)))};$('#sizes').append(b)}
+const brushSizes = [[9,'細筆',5],[20,'中筆',10],[38,'粗筆',17]];
+const sizePicker = $('#size-picker');
+const sizeOpen = $('#size-open');
+function syncSize() {
+  const [,label] = brushSizes.find(([value]) => value === size);
+  sizeOpen.setAttribute('aria-label', '畫筆粗細，目前是'+label);
+  sizeOpen.title = '畫筆粗細';
+  sizeOpen.dataset.size = size;
+  for(const option of document.querySelectorAll('.size')) {
+    option.setAttribute('aria-pressed', String(Number(option.dataset.size) === size));
+  }
+}
+function addSizeOptions(group) {
+  for(const [value,label,diameter] of brushSizes) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'size';
+    button.dataset.size = value;
+    button.innerHTML = `<span style="width:${diameter}px;height:${diameter}px"></span>`;
+    button.setAttribute('aria-label',label);
+    button.onclick = () => {
+      finish();
+      size = value;
+      syncSize();
+      if (sizePicker.open) sizePicker.close();
+    };
+    group.append(button);
+  }
+}
+addSizeOptions($('#sizes'));
+syncSize();
 let patternCategory='all';
 function filterPatterns(){document.querySelectorAll('.pattern').forEach(b=>{b.hidden=(b.dataset.legacy==='true'&&b.dataset.id!==state.pattern)||(patternCategory!=='all'&&b.dataset.category!==patternCategory)});document.querySelectorAll('.category-choice').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===patternCategory)));requestAnimationFrame(fit)}
 for(const c of [{id:'all',name:'全部',icon:'✨'},...patternCategories]){const b=document.createElement('button');b.className='category-choice';b.dataset.id=c.id;b.textContent=c.icon;b.title=c.name+'圖案';b.setAttribute('aria-label',c.name+'圖案');b.setAttribute('aria-pressed',String(c.id==='all'));b.onclick=()=>{finish();patternCategory=c.id;filterPatterns()};$('#pattern-categories').append(b)}
@@ -134,6 +164,11 @@ const nativeApp = window.Capacitor?.isNativePlatform();
 const exportButton = $('#export');
 const exportLabel = nativeApp ? '分享作品 PNG' : '↓ 儲存作品 PNG';
 if (nativeApp) {
+  addSizeOptions($('#size-options'));
+  syncSize();
+  sizeOpen.hidden = false;
+  sizeOpen.onclick = () => { finish(); sizePicker.showModal(); };
+  $('#size-close').onclick = () => sizePicker.close();
   exportButton.textContent = exportLabel;
   $('#storage-help').textContent = '畫作暫存在這個 App。移除 App 或清除 App 資料會移除暫存，喜歡的作品可以分享成 PNG。';
   $('#export-help').textContent = '用系統分享選單儲存或傳送圖片。直向、橫向都可以畫。';
@@ -480,7 +515,7 @@ function fillAt(point) {
 if (document.createElementNS) {
   if (nativeApp) {
     app.classList.add('is-native');
-    avatar = createGameAvatar({board, getPattern: () => state.pattern, onEditorChange(editing) {
+    avatar = createGameAvatar({board, onEditorChange(editing) {
       finish();
       if (editing) rewards.stop(true);
       app.classList.toggle('avatar-editing',editing);

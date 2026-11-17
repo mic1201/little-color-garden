@@ -56,6 +56,7 @@
   <div class="toolbar-paint">
     <button id="color-open" class="toolbar-button color-open" aria-label="選畫筆顏色" aria-haspopup="dialog"><span id="current-color" aria-hidden="true"></span></button>
     <button id="brush-summary" class="toolbar-button brush-open" aria-label="選工具" aria-haspopup="dialog"><span id="brush-icon" aria-hidden="true">🖍️</span><span id="brush-name" class="sr-only">彩色筆</span></button>
+    <button id="size-open" type="button" class="toolbar-button" aria-label="畫筆粗細" aria-haspopup="dialog" aria-controls="size-picker" hidden><span class="size-icon" aria-hidden="true"><i></i><i></i><i></i></span></button>
     <div id="sizes" class="sizes" role="group" aria-label="畫筆粗細"></div>
   </div>
   <div id="avatar-tools" class="toolbar-paint" hidden>
@@ -100,6 +101,10 @@
     <button type="button" data-avatar-person="boy"><canvas width="240" height="304" aria-hidden="true"></canvas>小男孩</button>
     <button type="button" data-avatar-person="girl"><canvas width="240" height="304" aria-hidden="true"></canvas>小女孩</button>
   </div>
+</dialog>
+<dialog id="size-picker" aria-labelledby="size-title">
+  <div class="dialog-title"><h2 id="size-title">畫筆粗細</h2><button id="size-close" type="button" class="close" aria-label="關閉粗細選單">×</button></div>
+  <div id="size-options" class="sizes" role="group" aria-label="粗細選項"></div>
 </dialog>
 <dialog id="brush-picker" aria-label="選擇工具">
   <div class="dialog-title"><h2 aria-label="畫畫工具"><span aria-hidden="true">🖍️</span></h2><button id="brush-close" class="close" aria-label="關閉工具選單">×</button></div>
