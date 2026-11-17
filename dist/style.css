@@ -292,6 +292,12 @@ dialog::backdrop { background: #34484766; backdrop-filter: blur(3px); }
 
 p { line-height: 1.62; }
 .tiny { font-size: 13px; color: #626e65; }
+.privacy-policy { margin-top: 12px; border-top: 1px solid #e5dfd4; font-size: 14px; line-height: 1.55; }
+.privacy-policy summary { padding: 12px 0; cursor: pointer; }
+.privacy-policy p { margin: 0 0 10px; overflow-wrap: anywhere; }
+#parent-gate label { display: block; margin: 8px 0; }
+#parent-gate-answer { width: 100%; min-height: 44px; padding: 8px 12px; font: inherit; }
+#parent-gate-status:empty, #purchase-status:empty { display: none; }
 .action {
   display: block;
   width: 100%;

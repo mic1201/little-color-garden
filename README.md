@@ -29,6 +29,25 @@ npm run mobile:ios
 - iOS 以 App 專屬識別碼及開發者團隊在 Xcode Archive，檢查版本、圖示及隱私資訊後送 TestFlight。Android 的 `./gradlew :app:bundleRelease` 會產生 AAB；Play 測試與正式發行需使用本 App 的上傳金鑰簽署。
 - 商店名稱、圖示、截圖、支援／隱私網址及年齡與資料揭露，應以本 App 的實際內容填寫。若以兒童為目標受眾，送審時依各商店的兒童 App 規範填報。
 
+### 去廣告內購測試
+
+在兩個商店各建立一次性商品 `remove_ads`。Apple 設為非消耗型內購，Google Play 設為一次性買斷。台灣目標定價 NT$60，畫面顯示商店回傳的價格。測試從「大人幫手 → 廣告與購買」完成家長驗證後開始。
+
+- iOS 使用 StoreKit 2。以 StoreKit 測試設定或 App Store Connect 沙盒商品驗證購買、等待核准、取消、恢復及撤銷。
+- Android 使用 Play Billing。將本 App 的 Base64 RSA 授權公鑰設為 Gradle 屬性 `playBillingPublicKey`，例如放在本機 `~/.gradle/gradle.properties`。用 Play 測試軌安裝，使用授權測試帳號驗證購買、待付款、確認交易、恢復及退款。授權公鑰用來檢查 Google Play 的交易簽章。
+
+### Android AdMob 測試
+
+Android Debug 版從「大人幫手 → 廣告與購買 → 查看 Google 測試廣告」載入一個官方測試橫幅。使用兒童年齡處理與 G 級內容上限。進入畫布、關閉家長區、切到背景、購買或恢復購買時，會關閉廣告。在沒有 Play 測試商品時，可以用以下指令建立模擬「尚未買斷」的測試 APK。Play 回傳已買斷或待付款時，仍會隱藏廣告。
+
+```sh
+npm run mobile:sync
+cd android
+./gradlew :app:assembleDebug -PadmobTestEntitlement=notPurchased
+```
+
+在可上網的 Android 手機或平板應能看到 Google 的測試標示。再切成飛航模式、退出家長區及用測試帳號恢復去廣告權益，確認廣告收起且可繼續畫畫。Release 建置沒有這個測試入口與測試廣告 SDK。
+
 ### 1.1.0
 
 - 點外層的筆圖示開啟工具選單，可選畫桶或畫筆。彩虹畫桶每次填色會抽出不同漸層。

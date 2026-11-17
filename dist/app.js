@@ -1,5 +1,6 @@
 import {ORIGINAL_PAPER,paperView,paperPoint,includePoint,rasterSize,beginPaper,paperMarkup} from './paper.js';
 import {createMusic} from './music.js';
+import {setupAdultActions} from './adult-actions.js';
 import {createRewards,rewardExportMarkup} from './rewards.js';
 import {createGameAvatar} from './avatar-game.js';
 import {clampSpectrum,spectrumColor,spectrumName} from './color-spectrum.js';
@@ -181,6 +182,7 @@ $('#clear').onclick=()=>{
 const nativeApp = window.Capacitor?.isNativePlatform();
 const exportButton = $('#export');
 const exportLabel = nativeApp ? '分享作品 PNG' : '↓ 儲存作品 PNG';
+const adultActions = nativeApp ? setupAdultActions(document, window.Capacitor) : null;
 if (nativeApp) {
   addSizeOptions($('#size-options'));
   syncSize();
@@ -261,7 +263,7 @@ async function createArtworkPng() {
   return png;
 }
 
-async function shareArtwork(png) {
+async function shareArtwork(png, confirmed) {
   const {Filesystem, Share} = window.Capacitor.Plugins;
   const dataUrl = await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -275,6 +277,7 @@ async function shareArtwork(png) {
     data: dataUrl.slice(dataUrl.indexOf(',') + 1),
     recursive: true
   });
+  if (!confirmed()) return;
   try {
     await Share.share({files: [uri], dialogTitle: '分享小小畫作'});
   } catch (error) {
@@ -283,6 +286,9 @@ async function shareArtwork(png) {
 }
 
 exportButton.onclick = async () => {
+  if (exportButton.disabled) return;
+  const confirmed = adultActions && await adultActions.confirm();
+  if (adultActions && (!confirmed || !confirmed())) return;
   finish();
   exportButton.disabled = true;
   exportButton.textContent = '正在準備圖片…';
@@ -295,16 +301,16 @@ exportButton.onclick = async () => {
     preview.src = exportUrl;
     preview.alt = nativeApp ? '完成的畫作' : '完成的畫作，可長按儲存';
     panel.replaceChildren(preview);
-    if (nativeApp) {
+    if (nativeApp && confirmed()) {
       try {
-        await shareArtwork(png);
+        await shareArtwork(png, confirmed);
       } catch {
         const notice = document.createElement('p');
         notice.setAttribute('role', 'status');
         notice.textContent = '暫時無法分享圖片，請再試一次。作品仍在畫布上。';
         panel.append(notice);
       }
-    } else {
+    } else if (!nativeApp) {
       const download = document.createElement('a');
       download.href = exportUrl;
       download.download = '我的小小畫作.png';

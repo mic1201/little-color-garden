@@ -10,6 +10,8 @@ import com.getcapacitor.android.R;
 public class MainActivity extends BridgeActivity {
     @Override
     protected void load() {
+        registerPlugin(DrawingStorePlugin.class);
+        AdMobTest.register(this);
         if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             registerPlugin(LocalTestTools.class);
         }
