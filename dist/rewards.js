@@ -5,6 +5,7 @@ import {createPlacedSticker, placedStickerArt, stickerById, stickerIcon, sticker
 import {itemById} from './avatar-art.js';
 
 const MAX_PLACED = 100;
+const RESUME_DELAY = 3000;
 const radius = STICKER_SIZE / 2;
 const arrowDelta = {ArrowLeft: [-1,0], ArrowRight: [1,0], ArrowUp: [0,-1], ArrowDown: [0,1]};
 const clamp = (n, low, high) => Math.max(low, Math.min(n, high));
@@ -157,6 +158,9 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   let parts = [];
   let area = ORIGINAL_PAPER;
   let timer = 0;
+  let resumeTimer;
+  let resumePending = false;
+  let drawingPointer;
   let frame = 0;
   let motionTime = 0;
   let generation = 0;
@@ -185,6 +189,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
       if (open) avatar.pauseEditor();
       else avatar.resumeEditor();
     }
+    if (changing) scheduleResume();
   }
 
   function updateCollectionDisplay() {
@@ -243,10 +248,46 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     }
   }
 
+  function cancelResume() {
+    clearTimeout(resumeTimer);
+    resumePending = false;
+  }
+
+  function readyToResume() {
+    return resumePending && drawingPointer === undefined && !drag && tray.hidden
+      && canPlay() && canCelebrate() && !document.hidden && !reducedMotion.matches
+      && !document.querySelector('dialog[open]');
+  }
+
+  function scheduleResume() {
+    clearTimeout(resumeTimer);
+    if (!readyToResume()) return;
+    resumeTimer = setTimeout(() => {
+      if (readyToResume()) void play();
+    }, RESUME_DELAY);
+  }
+
+  function drawingStarted(pointerId) {
+    drawingPointer = pointerId;
+    clearTimeout(resumeTimer);
+    if (board.hasAttribute('data-celebrating')) {
+      resumePending = true;
+      stop();
+    }
+  }
+
+  function drawingEnded({pointerId}) {
+    if (drawingPointer === undefined || pointerId !== drawingPointer) return;
+    drawingPointer = undefined;
+    sync();
+    scheduleResume();
+  }
+
   function stop(closeTray = false) {
     generation++;
     cancelAnimationFrame(frame);
     if (closeTray) {
+      cancelResume();
       cancelDrag();
       setTrayOpen(false);
     }
@@ -259,10 +300,12 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   }
 
   async function play(manual = false) {
+    if (drawingPointer !== undefined) return;
     if (!canPlay() || (reducedMotion.matches && !manual)) {
       updatePlayback(false);
       return;
     }
+    cancelResume();
     board.dataset.celebrating = '';
     updatePlayback(true);
     const ticket = generation;
@@ -349,6 +392,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     clearTimeout(timer);
     const next = getState();
     if (next !== state) {
+      cancelResume();
       cancelDrag();
       stop();
       state = next;
@@ -364,7 +408,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
       hud.hidden = true;
     }
     timer = setTimeout(() => {
-      if (state !== getState() || !canCelebrate()) return;
+      if (state !== getState() || drawingPointer !== undefined || !canCelebrate()) return;
       const percent = measure(state);
       hud.hidden = percent === null;
       if (percent === null) return;
@@ -479,6 +523,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     drag.ghost?.remove();
     delete tray.dataset.dragging;
     drag = null;
+    scheduleResume();
   }
 
   function endDrag(event) {
@@ -618,6 +663,8 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   playback.onclick = () => {
     if (board.hasAttribute('data-celebrating')) {
       stop();
+      resumePending = true;
+      scheduleResume();
       status.textContent = '已回到原本的畫，現在可以繼續作畫。';
     } else {
       void play(true);
@@ -651,17 +698,24 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     trayButton.focus();
   }, true);
   ink.addEventListener('pointerdown', audio.warm);
+  ink.addEventListener('lostpointercapture', drawingEnded);
   board.addEventListener('pointerup', audio.warm);
   window.addEventListener('pointermove', moveDrag, {capture: true, passive: false});
   window.addEventListener('pointerup', endDrag, true);
+  window.addEventListener('pointerup', drawingEnded);
   window.addEventListener('pointercancel', endDrag, true);
+  window.addEventListener('pointercancel', drawingEnded);
   window.addEventListener('blur', cancelDrag);
+  window.addEventListener('blur', () => drawingEnded({pointerId:drawingPointer}));
+  document.addEventListener('close', scheduleResume, true);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
+      cancelResume();
+      drawingPointer = undefined;
       cancelDrag();
       stop();
     }
   });
 
-  return {sync, resize, stop};
+  return {sync, resize, stop, drawingStarted};
 }

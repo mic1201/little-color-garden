@@ -361,7 +361,6 @@ p { line-height: 1.62; }
 
 /* Web rewards use the same positions before and after a drawing is finished. */
 .board #reward-motion { pointer-events: none; }
-.board[data-celebrating] #ink { pointer-events: none; }
 #reward-stickers { position: absolute; inset: 0; pointer-events: none; }
 .placed-sticker { pointer-events: all; cursor: grab; touch-action: none; outline: none; }
 .placed-sticker:active { cursor: grabbing; }
