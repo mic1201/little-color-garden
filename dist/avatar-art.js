@@ -1,3 +1,6 @@
+import {drawStroke} from './engine.js';
+
+export const AVATAR_RAINBOW = 'rainbow';
 export const AVATAR_W = 240;
 export const AVATAR_H = 304;
 const LINE = '#394351';
@@ -521,6 +524,18 @@ export function makeAvatarInk(canvas, strokes, pending) {
   const ctx=canvas.getContext('2d');
   ctx.clearRect(0,0,AVATAR_W,AVATAR_H);
   for (const stroke of pending ? [...strokes,pending] : strokes) {
+    if (stroke.color === AVATAR_RAINBOW) {
+      // Match the drawing brush's colour cycle to the smaller avatar canvas.
+      const scale = 4;
+      ctx.save();
+      ctx.scale(1 / scale, 1 / scale);
+      drawStroke(ctx, {
+        tool:'marker', rainbow:true, color:'#ef7790', size:6.5 * scale,
+        points:stroke.points.map(({x,y}) => ({x:x * scale, y:y * scale}))
+      });
+      ctx.restore();
+      continue;
+    }
     const [first,...rest] = stroke.points;
     if (!first) continue;
     ctx.beginPath();

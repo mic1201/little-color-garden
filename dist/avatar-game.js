@@ -1,14 +1,18 @@
-import {AVATAR_W, AVATAR_H, drawAvatar, drawWardrobeItem, itemById, makeAvatarInk, restoreOutfit, wardrobe} from './avatar-art.js';
+import {AVATAR_W, AVATAR_H, AVATAR_RAINBOW, drawAvatar, drawWardrobeItem, itemById, makeAvatarInk, restoreOutfit, wardrobe} from './avatar-art.js';
 import {drawActor, enterDuration, insidePose, patrolPose, patrolTrack, sceneById, stageToPicture} from './avatar-stage.js';
 import {createToolbarInteractions} from './avatar-toolbar.js';
 import {ORIGINAL_PAPER} from './paper.js';
 import {transformSticker} from './reward-motion.js';
+import {RAINBOW_COLORS} from './fills.js';
 
 const KEY = 'little-color-garden-avatar-v1';
 const IDLE_DELAY = 3000;
 const DEFAULT_BACKGROUND = '#fff8eb';
 const people = ['boy', 'girl'];
 const colors = [['莓果紅','#ef7790'], ['芒果黃','#edb247'], ['薄荷綠','#4faf85'], ['海水藍','#4b9dc6'], ['芋頭紫','#9873cf'], ['奶油白',DEFAULT_BACKGROUND]];
+const brushColors = [...colors, ['彩虹色', AVATAR_RAINBOW]];
+const rainbowPreview = `linear-gradient(135deg,${RAINBOW_COLORS.join(',')})`;
+const colorSwatch = tone => tone === AVATAR_RAINBOW ? rainbowPreview : tone;
 const limit = (n, min, max) => Math.max(min, Math.min(n, max));
 const mix = (a, b, u) => a + (b - a) * u;
 const lerpRange = (n, start, end, a, b) => mix(a, b, limit((n - start) / (end - start), 0, 1));
@@ -18,7 +22,7 @@ export function restoreAvatar(saved) {
   const profiles = Object.fromEntries(people.map(id => {
     const profile = saved?.profiles?.[id];
     const strokes = Array.isArray(profile?.strokes) ? profile.strokes.slice(-120).filter(stroke =>
-      colors.some(([, color]) => color === stroke?.color) &&
+      brushColors.some(([, color]) => color === stroke?.color) &&
       Array.isArray(stroke.points) && stroke.points.length > 0 && stroke.points.length <= 640 &&
       stroke.points.every(p => p && Number.isFinite(p.x) && Number.isFinite(p.y) &&
         p.x >= 0 && p.x <= AVATAR_W && p.y >= 0 && p.y <= AVATAR_H)
@@ -328,28 +332,30 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
       button.setAttribute('aria-pressed', String(button.dataset.target === colorTarget));
     }
     for (const button of $('#avatar-colors').children) {
+      button.hidden = colorTarget === 'background' && button.dataset.color === AVATAR_RAINBOW;
       button.setAttribute('aria-pressed', String(button.dataset.color === selected));
     }
   }
   for (const button of colorTargets) {
     button.onclick = () => { colorTarget = button.dataset.target; renderPalette(); };
   }
-  for (const [name, tone] of colors) {
+  for (const [name, tone] of brushColors) {
     const button = document.createElement('button');
     const swatch = document.createElement('span');
     button.type = 'button';
     button.dataset.color = tone;
     button.setAttribute('aria-label', name);
-    swatch.style.setProperty('--avatar-color', tone);
+    swatch.style.setProperty('--avatar-color', colorSwatch(tone));
     button.append(swatch);
     button.onclick = () => {
       if (colorTarget === 'background') {
+        if (tone === AVATAR_RAINBOW) return;
         profile().background = tone;
         save();
         paintPortrait(portraitContext);
       } else {
         color = tone;
-        $('#avatar-current-color').style.background = tone;
+        $('#avatar-current-color').style.background = colorSwatch(tone);
       }
       palette.close();
     };

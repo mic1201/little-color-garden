@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import {drawStroke,validDocument,TOOLS,backgroundColor} from './dist/engine.js';
+import {AVATAR_RAINBOW,makeAvatarInk} from './dist/avatar-art.js';
+import {restoreAvatar} from './dist/avatar-game.js';
 function record(s){const ops=[];const ctx=new Proxy({},{set(t,k,v){ops.push([k,v]);t[k]=v;return true},get(t,k){return t[k]??((...a)=>ops.push([k,...a]))}});drawStroke(ctx,s);return ops}
 const base={color:'#1256ef',size:20,seed:481,points:[{x:50,y:100},{x:180,y:190},{x:600,y:100}]};
 for(const tool of TOOLS){const solid={...base,tool},rainbow={...solid,rainbow:true};
@@ -13,4 +15,27 @@ for(const tool of TOOLS){const solid={...base,tool},rainbow={...solid,rainbow:tr
 const old={version:1,pattern:'blank',strokes:[{...base,tool:'marker'}]};assert(validDocument(old,['blank']));assert.equal(backgroundColor(old),'#ffffff');
 for(const rainbow of ['true',1,null,{},[]])assert(!validDocument({...old,strokes:[{...old.strokes[0],rainbow}]},['blank']));
 for(const tool of ['spray','sand','stamp','marker','crayon','soft','ribbon']){const ops=record({...base,tool,rainbow:true,points:Array.from({length:10000},(_,i)=>({x:i%2?1000:0,y:i%2?900:0}))});assert(ops.length<110000,tool+' bounded render commands');}
+
+function recordAvatarInk(strokes) {
+  const colors=[];
+  const ctx=new Proxy({}, {
+    set(target,key,value) {
+      if (key==='strokeStyle' || key==='fillStyle') colors.push(value);
+      target[key]=value;
+      return true;
+    },
+    get(target,key) { return target[key] ?? (()=>{}); }
+  });
+  makeAvatarInk({getContext:()=>ctx},strokes);
+  return colors;
+}
+const avatarPoints=[{x:85,y:105},{x:153,y:105}];
+const avatarStrokes=[{color:'#ef7790',points:avatarPoints},{color:AVATAR_RAINBOW,points:avatarPoints}];
+const restoredAvatarStrokes=restoreAvatar(JSON.parse(JSON.stringify({
+  person:'girl',profiles:{girl:{strokes:avatarStrokes}}
+}))).profiles.girl.strokes;
+assert.deepEqual(restoredAvatarStrokes,avatarStrokes,'Avatar saves retain both rainbow and legacy solid strokes');
+assert.deepEqual(recordAvatarInk(restoredAvatarStrokes),recordAvatarInk(avatarStrokes));
+assert.deepEqual(recordAvatarInk([avatarStrokes[0]]),['#ef7790']);
+assert(new Set(recordAvatarInk([avatarStrokes[1]]).filter(color=>color.startsWith('hsl('))).size>5);
 console.log('PASS rainbow all brushes, distance hues, replay/restore, solid legacy, eraser, taps and bounded rendering.');
