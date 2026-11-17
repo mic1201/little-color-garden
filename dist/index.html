@@ -83,10 +83,21 @@
 </div>
 <dialog id="avatar-closet" aria-labelledby="avatar-closet-title">
   <div class="dialog-title"><h2 id="avatar-closet-title">我的衣櫃</h2><button id="avatar-close" type="button" class="close" aria-label="關閉主角衣櫃">×</button></div>
-  <div class="avatar-wardrobe-header"><button id="avatar-change" type="button">換主角</button></div>
-  <div id="avatar-slots" role="group" aria-label="穿搭分類"></div>
-  <div id="avatar-items" role="group" aria-label="收集的穿搭"></div>
-  <p id="avatar-empty">畫圖開寶箱，就有機會收集新穿搭。</p>
+  <div class="avatar-wardrobe-body">
+    <div class="avatar-fitting">
+      <canvas id="avatar-fitting" width="240" height="304" role="img" aria-label="主角試穿預覽"></canvas>
+      <button id="avatar-change" type="button">換主角</button>
+    </div>
+    <div>
+      <div id="avatar-slots" role="group" aria-label="穿搭分類"></div>
+      <div id="avatar-items" role="group" aria-label="可試穿的款式"></div>
+      <div class="avatar-equip-actions">
+        <button id="avatar-equip" type="button" disabled>裝備</button>
+        <button id="avatar-unequip" type="button" disabled>取下</button>
+      </div>
+      <p id="avatar-fitting-status" role="status" hidden></p>
+    </div>
+  </div>
 </dialog>
 <dialog id="avatar-color-picker" aria-labelledby="avatar-color-title">
   <div class="dialog-title"><h2 id="avatar-color-title">選顏色</h2><button id="avatar-color-close" type="button" class="close" aria-label="關閉主角選色">×</button></div>
@@ -135,5 +146,5 @@
   <p id="reward-collection-count" class="tiny" role="status"></p>
   <button id="reward-collection-reset" type="button" class="action">重置裝飾品收藏</button>
   <button id="reward-collection-restore" type="button" class="action" hidden>還原收藏</button>
-</section><p id="export-help" class="tiny">平板小提示：若圖片另開視窗，長按圖片儲存，或使用系統分享。直向、橫向都可以畫。</p><p class="tiny">🖍️ 選工具；按色圓選基本色，或按「自訂顏色」開啟光譜；🖼️ 選圖案。</p><p class="tiny">🪣 從工具選單選擇畫桶。選好喜歡的顏色，再點線稿裡的區塊或畫紙背景。重複點選可以換色，↶ 可以復原。切回畫筆就能繼續手繪。</p><div id="export-preview"></div></dialog><dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message"><div class="dialog-title"><h2 id="confirm-title" class="sr-only">換一張紙嗎？</h2></div><p id="confirm-message" class="sr-only">目前這張畫會被清掉，先請大人儲存喜歡的作品。</p><div id="confirm-preview" class="confirm-preview" aria-hidden="true"><span>🎨</span><span>→</span><span>📄</span></div><div class="confirm-actions"><button id="cancel" class="action" aria-label="取消，保留現在的畫" title="保留現在的畫"><span aria-hidden="true">↩ 🖍️</span><span class="sr-only">保留現在的畫</span></button><button id="confirm" class="action primary" aria-label="確定換紙，現在的筆跡將清除" title="確定換紙"><span aria-hidden="true">📄 ✓</span><span class="sr-only">確定換紙</span></button></div></dialog><p id="reward-status" class="sr-only" role="status"></p>
+</section><button id="test-unlock" type="button" class="action setting" aria-pressed="false" hidden><span>全解鎖（測試）</span><span class="setting-indicator" aria-hidden="true"></span></button><p id="export-help" class="tiny">平板小提示：若圖片另開視窗，長按圖片儲存，或使用系統分享。直向、橫向都可以畫。</p><p class="tiny">🖍️ 選工具；按色圓選基本色，或按「自訂顏色」開啟光譜；🖼️ 選圖案。</p><p class="tiny">🪣 從工具選單選擇畫桶。選好喜歡的顏色，再點線稿裡的區塊或畫紙背景。重複點選可以換色，↶ 可以復原。切回畫筆就能繼續手繪。</p><div id="export-preview"></div></dialog><dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message"><div class="dialog-title"><h2 id="confirm-title" class="sr-only">換一張紙嗎？</h2></div><p id="confirm-message" class="sr-only">目前這張畫會被清掉，先請大人儲存喜歡的作品。</p><div id="confirm-preview" class="confirm-preview" aria-hidden="true"><span>🎨</span><span>→</span><span>📄</span></div><div class="confirm-actions"><button id="cancel" class="action" aria-label="取消，保留現在的畫" title="保留現在的畫"><span aria-hidden="true">↩ 🖍️</span><span class="sr-only">保留現在的畫</span></button><button id="confirm" class="action primary" aria-label="確定換紙，現在的筆跡將清除" title="確定換紙"><span aria-hidden="true">📄 ✓</span><span class="sr-only">確定換紙</span></button></div></dialog><p id="reward-status" class="sr-only" role="status"></p>
 <audio id="soundtrack" preload="none" hidden></audio><script type="module" src="app.js"></script></body></html>

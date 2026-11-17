@@ -101,7 +101,11 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
   const undo = $('#avatar-undo');
   const tabs = $('#avatar-slots');
   const itemGrid = $('#avatar-items');
-  const empty = $('#avatar-empty');
+  const fitting = $('#avatar-fitting');
+  const fittingContext = fitting.getContext('2d');
+  const equip = $('#avatar-equip');
+  const unequip = $('#avatar-unequip');
+  const fittingStatus = $('#avatar-fitting-status');
   const status = $('#reward-status');
   const ink = document.createElement('canvas');
   ink.width = AVATAR_W;
@@ -109,6 +113,8 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   let collection = new Set();
+  let testOutfits;
+  let fittingOutfit = {};
   let category = wardrobe[0];
   let color = colors[0][1];
   let colorTarget = 'brush';
@@ -134,6 +140,7 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
     drawPlayer: (target, pose, time) => drawActor(target, state.person, gear, ink, pose, time)
   });
   const profile = () => state.profiles[state.person];
+  const outfit = () => testOutfits?.[state.person] ?? profile().equipped;
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(state)); }
     catch { status.textContent = '主角暫存空間不足，這次造型會先保留在畫面上。'; }
@@ -236,7 +243,7 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
 
   function updatePortrait() {
     if (!state.person) return;
-    gear = Object.fromEntries(Object.entries(profile().equipped).filter(([, id]) => collection.has(id)));
+    gear = Object.fromEntries(Object.entries(outfit()).filter(([, id]) => collection.has(id)));
     makeAvatarInk(ink, profile().strokes, pending);
     undo.disabled = profile().strokes.length === 0;
     icon.setTransform(1, 0, 0, 1, 0, 0);
@@ -247,33 +254,62 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
     else schedulePatrol();
   }
 
+  function updateFitting() {
+    const shown = {...gear, ...fittingOutfit};
+    fittingContext.clearRect(0, 0, fitting.width, fitting.height);
+    drawAvatar(fittingContext, state.person, shown, ink);
+    const equipped = gear[category.slot];
+    const selected = shown[category.slot];
+    for (const button of itemGrid.children) {
+      button.setAttribute('aria-pressed', String(button.dataset.item === selected));
+      button.toggleAttribute('data-equipped', button.dataset.item === equipped);
+    }
+    equip.disabled = !collection.has(selected) || selected === equipped;
+    unequip.disabled = !equipped;
+    const locked = Boolean(selected && !collection.has(selected));
+    fittingStatus.hidden = !locked;
+    fittingStatus.textContent = locked ? '這件可以試穿，從寶箱取得後就能裝備。' : '';
+  }
+
   function renderCloset() {
     if (!state.person) return;
-    const ids = category.items.filter(({id}) => collection.has(id));
     for (const tab of tabs.children) {
       const group = wardrobe.find(entry => entry.slot === tab.dataset.slot);
       tab.setAttribute('aria-pressed', String(group === category));
       tab.toggleAttribute('data-owned', group.items.some(({id}) => collection.has(id)));
     }
-    empty.hidden = ids.length > 0;
-    itemGrid.replaceChildren(...ids.map(piece => {
+    itemGrid.replaceChildren(...category.items.map(piece => {
       const button = document.createElement('button');
       button.type = 'button';
-      button.setAttribute('aria-pressed', String(gear[category.slot] === piece.id));
+      button.dataset.item = piece.id;
+      const locked = !collection.has(piece.id);
+      button.toggleAttribute('data-locked', locked);
+      button.setAttribute('aria-label', locked ? `${piece.name}，未解鎖，可試穿` : piece.name);
       button.append(itemIcon(itemById.get(piece.id)), piece.name);
       button.onclick = () => {
-        const slot = category.slot;
-        const removing = profile().equipped[slot] === piece.id;
-        if (removing) delete profile().equipped[slot];
-        else profile().equipped[slot] = piece.id;
-        for (const option of itemGrid.children) option.setAttribute('aria-pressed', String(!removing && option === button));
-        updatePortrait();
-        save();
-        status.textContent = removing ? `已取下${piece.name}。` : `已穿戴${piece.name}。`;
+        fittingOutfit[category.slot] = piece.id;
+        updateFitting();
       };
       return button;
     }));
+    updateFitting();
   }
+
+  function applyOutfit(id) {
+    const slot = category.slot;
+    if (id && (!collection.has(id) || itemById.get(id)?.slot !== slot)) return;
+    if (id) outfit()[slot] = id;
+    else delete outfit()[slot];
+    delete fittingOutfit[slot];
+    updatePortrait();
+    updateFitting();
+    if (!testOutfits) save();
+  }
+  equip.onclick = () => {
+    const selected = fittingOutfit[category.slot];
+    if (selected) applyOutfit(selected);
+  };
+  unequip.onclick = () => applyOutfit();
 
   for (const group of wardrobe) {
     const button = document.createElement('button');
@@ -410,6 +446,7 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
   };
   open.onclick = () => {
     cancelIdle();
+    fittingOutfit = {};
     delete open.dataset.new;
     delete tile.dataset.new;
     delete patternButton.dataset.newAvatar;
@@ -467,7 +504,9 @@ export function createGameAvatar({board, canInteract, onEditorChange}) {
       patternButton.dataset.newAvatar = '';
       open.dataset.new = '';
     },
-    updateCollection(ids) {
+    updateCollection(ids, testUnlocked = false) {
+      if (testUnlocked) testOutfits ??= Object.fromEntries(people.map(id => [id, {...state.profiles[id].equipped}]));
+      else testOutfits = undefined;
       collection = new Set(ids.filter(id => itemById.has(id)));
       updatePortrait();
       if (closet.open) renderCloset();

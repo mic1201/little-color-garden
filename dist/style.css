@@ -642,9 +642,18 @@ p { line-height: 1.62; }
   .app.is-native #pattern-open { grid-column: 1 / -1; }
 }
 
-.avatar-wardrobe-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 9px 0 3px; }
-.avatar-wardrobe-header h3 { margin: 0; font-size: 17px; }
-#avatar-change { min-height: 44px; padding-inline: 10px; border: 1px solid var(--tool-border); border-radius: 11px; background: #f4f0e7; }
+#avatar-closet { width: min(620px, calc(100% - 24px)); }
+.avatar-wardrobe-body { display: grid; gap: 12px; }
+.avatar-fitting { display: grid; justify-items: center; align-content: center; padding: 5px 8px 8px; border-radius: 14px; background: #f1ebf7; }
+#avatar-fitting { width: auto; height: clamp(130px, 22dvh, 206px); max-width: 100%; object-fit: contain; }
+#avatar-change, .avatar-equip-actions button { min-height: 44px; padding-inline: 12px; border: 1px solid var(--tool-border); border-radius: 11px; background: #f4f0e7; }
+.avatar-equip-actions { display: flex; gap: 7px; margin-top: 10px; }
+#avatar-equip { background: #e1ecdf; }
+#avatar-fitting-status { margin: 6px 0 0; color: #566257; font-size: 13px; }
+@media (orientation: landscape) {
+  .avatar-wardrobe-body { grid-template-columns: minmax(115px, 1fr) minmax(0, 2fr); }
+  #avatar-fitting { height: clamp(130px, 45dvh, 232px); }
+}
 #avatar-slots { display: flex; flex-wrap: wrap; gap: 4px; }
 #avatar-slots button { border-color: var(--tool-border); font-size: 21px; position: relative; }
 #avatar-slots button[data-owned]::after { content: ''; position: absolute; right: 5px; top: 5px; width: 5px; height: 5px; border-radius: 50%; background: #7a5f9b; }
@@ -662,7 +671,16 @@ p { line-height: 1.62; }
   font-size: 13px;
 }
 #avatar-items canvas { width: 42px; height: 42px; }
-#avatar-empty { margin-bottom: 4px; color: #566257; font-size: 14px; }
+#avatar-items button { position: relative; }
+#avatar-items button[data-locked] canvas { opacity: .56; }
+#avatar-items button[data-locked]::after, #avatar-items button[data-equipped]::after {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  font-size: 12px;
+}
+#avatar-items button[data-locked]::after { content: '🔒'; }
+#avatar-items button[data-equipped]::after { content: '✓'; color: #466d55; }
 .avatar-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .avatar-choices button { font-size: 16px; }
 .avatar-choices canvas { display: block; width: 100%; max-height: 38dvh; object-fit: contain; }

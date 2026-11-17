@@ -124,7 +124,7 @@ function ghostAt({x, y}, scale = 1) {
   return `translate(${x - 28}px,${y - 28}px) scale(${scale})`;
 }
 
-export function createRewards({board, ink, getState, motionArtwork, canCelebrate, save, avatar}) {
+export function createRewards({board, ink, getState, motionArtwork, canCelebrate, save, avatar, testTools = false}) {
   const hud = board.querySelector('#reward-hud');
   const progress = board.querySelector('#reward-progress');
   const playback = board.querySelector('#reward-playback');
@@ -143,6 +143,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   const resetCollection = document.querySelector('#reward-collection-reset');
   const restoreCollection = document.querySelector('#reward-collection-restore');
   const status = document.querySelector('#reward-status');
+  const testUnlock = testTools ? document.querySelector('#test-unlock') : null;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const measure = createPaintProgress();
   const audio = createChestAudio();
@@ -164,6 +165,11 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   let drag;
   let suppressedClick;
   let stickerNodes = [];
+  let testUnlocked = false;
+  let testStickers = [];
+
+  const availableStickers = () => testUnlocked ? stickers.map(([id]) => id) : collected.filter(id => stickerById.has(id));
+  const canPlay = () => parts.length > 0 && (testUnlocked || reward?.completed);
 
   function persist() {
     state.reward = reward;
@@ -179,23 +185,24 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
 
   function updateInventory() {
     const stickerCount = collected.filter(id => stickerById.has(id)).length;
-    emptyTray.hidden = stickerCount > 0;
-    inventory.hidden = stickerCount === 0;
+    emptyTray.hidden = testUnlocked || stickerCount > 0;
+    inventory.hidden = !emptyTray.hidden;
     collectionCount.textContent = avatar
       ? `已收集 ${stickerCount} 件裝飾品、${collected.length - stickerCount} 件穿搭`
       : `已收集 ${stickerCount} 件裝飾品`;
     resetCollection.disabled = collected.length === 0;
     restoreCollection.hidden = collectionIds(state.rewardCollectionBackup).length === 0;
-    avatar?.updateCollection(collected.map(id => outfitPiece(id)?.id).filter(Boolean));
+    const outfits = testUnlocked ? [...itemById.keys()] : collected.map(id => outfitPiece(id)?.id).filter(Boolean);
+    avatar?.updateCollection(outfits, testUnlocked);
   }
 
   function renderInventory() {
-    inventory.replaceChildren(...collected.filter(id => stickerById.has(id)).map(makeInventoryItem));
+    inventory.replaceChildren(...availableStickers().map(makeInventoryItem));
     updateInventory();
   }
 
   function updatePlayback(playing) {
-    playback.hidden = !parts.length || !reward?.completed;
+    playback.hidden = !canPlay();
     playback.toggleAttribute('data-playing', playing);
     const label = playing ? '暫停動畫，繼續作畫' : '播放動畫';
     playback.setAttribute('aria-label', label);
@@ -245,7 +252,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
   }
 
   async function play(manual = false) {
-    if (!reward.completed || !parts.length || (reducedMotion.matches && !manual)) {
+    if (!canPlay() || (reducedMotion.matches && !manual)) {
       updatePlayback(false);
       return;
     }
@@ -336,6 +343,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
       stop();
       state = next;
       reward = readReward(state);
+      testStickers = [];
       collected = rewardCollection(state);
       if (collected.length) state.rewardCollection = collected;
       parts = motionFor(state.pattern);
@@ -352,7 +360,7 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
       if (percent === null) return;
       progress.textContent = `${percent}%`;
       progress.setAttribute('aria-label', `圖案塗色進度 ${percent}%`);
-      if (percent >= REWARD_THRESHOLD && !reward.completed) award();
+      if (percent >= REWARD_THRESHOLD && !reward.completed && !testUnlocked) award();
     }, 65);
   }
 
@@ -375,26 +383,30 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
 
   function savePlacement(sticker, point) {
     Object.assign(sticker, point);
+    if (testStickers.includes(sticker)) return;
     state.paper = includePoint(state.paper, sticker, radius);
     persist();
   }
 
   function addSticker(id, point) {
-    if (reward.stickers.length >= MAX_PLACED) {
+    if (reward.stickers.length + testStickers.length >= MAX_PLACED) {
       status.textContent = '這張畫的裝飾品滿了，移除一個就能再加。';
       return;
     }
     const sticker = {id};
-    reward.stickers.push(sticker);
+    const placements = testUnlocked ? testStickers : reward.stickers;
+    placements.push(sticker);
     savePlacement(sticker, point);
     status.textContent = `${stickerById.get(id).name}已放到畫布上。`;
     return renderSticker(sticker);
   }
 
   function removeSticker(sticker) {
-    reward.stickers.splice(reward.stickers.indexOf(sticker), 1);
+    const testing = testStickers.includes(sticker);
+    const placements = testing ? testStickers : reward.stickers;
+    placements.splice(placements.indexOf(sticker), 1);
     renderStickers();
-    persist();
+    if (!testing) persist();
     status.textContent = `${stickerById.get(sticker.id).name}${collected.includes(sticker.id) ? '已收回裝飾品欄' : '已從畫布移除'}。`;
   }
 
@@ -528,6 +540,22 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     stickerLayer.replaceChildren();
     stickerNodes = [];
     reward.stickers.forEach(renderSticker);
+    testStickers.forEach(renderSticker);
+  }
+
+  if (testUnlock) {
+    testUnlock.hidden = false;
+    testUnlock.onclick = () => {
+      stop(true);
+      testUnlocked = !testUnlocked;
+      testStickers = [];
+      testUnlock.setAttribute('aria-pressed', String(testUnlocked));
+      renderInventory();
+      renderStickers();
+      updatePlayback(false);
+      status.textContent = testUnlocked ? '已開啟測試用全解鎖。' : '已回到正式遊玩。';
+      sync();
+    };
   }
 
   playback.onclick = () => {

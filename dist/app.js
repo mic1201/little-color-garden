@@ -528,7 +528,9 @@ if (document.createElementNS) {
       rewards.sync();
     }});
   }
-  rewards = createRewards({board, ink: canvas, getState: () => state, canCelebrate: () => pointer === null && !avatar?.editing, motionArtwork, save, avatar});
+  const testTools = nativeApp && window.Capacitor.isPluginAvailable?.('LocalTestTools') === true;
+  rewards = createRewards({board, ink: canvas, getState: () => state, canCelebrate: () => pointer === null && !avatar?.editing,
+    motionArtwork, save, avatar, testTools});
   rewards.resize(view);
   rewards.sync();
   avatar?.start();
