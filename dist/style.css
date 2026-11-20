@@ -26,6 +26,10 @@ button:focus-visible, .color-spectrum:focus-visible {
 button:disabled { opacity: .38; cursor: default; }
 
 .app {
+  /* Keep long presses on the drawing surface and tools from selecting the page. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   height: 100vh;
