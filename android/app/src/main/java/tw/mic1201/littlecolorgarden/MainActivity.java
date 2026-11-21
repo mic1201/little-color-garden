@@ -13,6 +13,7 @@ public class MainActivity extends BridgeActivity {
         if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             registerPlugin(LocalTestTools.class);
         }
+        AdMobTest.register(this);
         WebView webView = findViewById(R.id.webview);
         webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
         super.load();

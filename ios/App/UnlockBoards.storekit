@@ -1,0 +1,37 @@
+{
+  "identifier": "5B2A8736",
+  "nonRenewingSubscriptions": [],
+  "products": [
+    {
+      "displayPrice": "60",
+      "familyShareable": false,
+      "internalID": "2EAC4F9D",
+      "localizations": [
+        {
+          "description": "一次購買，永久解鎖小小畫畫花園的所有畫紙。",
+          "displayName": "解鎖所有畫板",
+          "locale": "zh_Hant"
+        },
+        {
+          "description": "A one-time purchase that unlocks all drawing boards.",
+          "displayName": "Unlock All Drawing Boards",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "unlock_all_boards",
+      "referenceName": "Unlock All Drawing Boards",
+      "type": "NonConsumable"
+    }
+  ],
+  "settings": {
+    "_failTransactionsEnabled": false,
+    "_locale": "zh_TW",
+    "_storefront": "TWN",
+    "_storeKitErrors": []
+  },
+  "subscriptionGroups": [],
+  "version": {
+    "major": 4,
+    "minor": 0
+  }
+}

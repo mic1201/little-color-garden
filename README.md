@@ -25,15 +25,61 @@ npm run mobile:ios
 
 ### 測試與上架
 
-- 依恐龍練字島的做法，先用模擬器及實機確認直向、橫向、離線畫畫、填色、重新開啟畫作與匯出，再依平台打包。App 識別碼為 `tw.mic1201.littlecolorgarden`，目前版本為 `1.1.0`（build 11）。
+- 依恐龍練字島的做法，先用模擬器及實機確認直向、橫向、離線畫畫、填色、重新開啟畫作與匯出，再依平台打包。App 識別碼為 `tw.mic1201.littlecolorgarden`，目前版本為 `1.2.3`（Android build 22，iOS build 20）。
 - iOS 以 App 專屬識別碼及開發者團隊在 Xcode Archive，檢查版本、圖示及隱私資訊後送 TestFlight。Android 的 `./gradlew :app:bundleRelease` 會產生 AAB；Play 測試與正式發行需使用本 App 的上傳金鑰簽署。
 - 商店名稱、圖示、截圖、支援／隱私網址及年齡與資料揭露，應以本 App 的實際內容填寫。若以兒童為目標受眾，送審時依各商店的兒童 App 規範填報。
+
+### 內購測試
+
+- iOS 正式版無廣告。主角畫布、自由畫及五張線稿免費。其餘畫紙可用非消耗型商品 `unlock_all_boards` 一次解鎖。台灣定價 NT$60，畫面顯示 StoreKit 回傳的當地價格。點鎖定畫紙後選「請大人幫忙」，或在「大人幫手 → 畫板與購買」進入。購買與恢復都需要家長驗證。
+- iOS 使用 Face ID、Touch ID 或裝置密碼進入家長購買區。家長可另設 6 位數 PIN。關閉大人區、App 進入背景或超過兩分鐘後，需重新驗證。使用 StoreKit 測試設定或 App Store Connect 沙盒驗證購買、等待核准、取消、恢復及撤銷。
+- Android 正式版的所有畫紙免費。家長可從「大人幫手 → 廣告與購買」用一次性商品 `remove_interstitial_ads` 買斷換畫板時的全螢幕插播，台灣定價 NT$60，畫面使用 Google Play 回傳的價格。上方固定橫幅仍可顯示，舊商品 `remove_ads` 可恢復並移除兩種廣告。Play Billing 以本 App 的 Base64 RSA 授權公鑰驗證購買，請將公鑰設定為 Gradle 屬性 `playBillingPublicKey`，例如放在本機 `android/local.properties`。已驗證的買斷權益會暫存於裝置，重新連線後更新。
+
+### 正式廣告配置
+
+直向與橫向畫板上方都採用 320 × 50 固定橫幅。直向預留 68 點，橫向預留 60 點，畫布位於橫幅下方。Android 正式版從本機 Gradle 屬性讀取下列資料。
+
+| 屬性 | 內容 |
+| --- | --- |
+| `admobAndroidAppId` | 正式 Android App `tw.mic1201.littlecolorgarden` 在 AdMob 的 App ID |
+| `admobAndroidBannerId` | 同一個 AdMob App 的正式橫幅廣告單元 ID |
+| `admobAndroidInterstitialId` | 同一個 AdMob App 的標準插播廣告單元 ID。留空時只顯示橫幅 |
+
+將屬性放在本機的 `android/local.properties`。也可用 Gradle 屬性覆蓋本機設定。同步 Android 資源後用 `./gradlew :app:bundleRelease` 建置。有正式 App ID 及橫幅單元才會包含廣告 SDK。Gradle 會拒絕 Google 測試 ID、不同發布商的單元，或重複使用的單元。測試格式、模擬插播模式和 Google 官方測試單元由 Debug 版提供。Android 廣告請求採用兒童年齡處理及 G 級素材上限。插播僅在換畫板時顯示已預載的廣告，至少相隔三次換畫板及三分鐘。離線或尚無廣告時直接開啟下一張畫板。啟用插播前，在 AdMob 關閉高參與度廣告，使用標準廣告單元與適齡素材，並驗證廣告可在五秒內關閉。
+
+AdMob 帳戶設定時，連結商店頁所列的開發者網站，將帳戶提供的 [app-ads.txt](app-ads.txt) 放到網站根目錄，完成 App 驗證及上架準備審查。Play Console 依這次提交的版本填寫含廣告、目標年齡及資料安全，並確認廣告來源符合 Families。
+
+iOS 的正式 **App** 方案目前以無第三方廣告送驗。**AdMobTest** 用於確認版位和 StoreKit 流程。若正式 iOS 投放兒童向第三方廣告，送審前需取得該服務公開的適齡素材人工審查說明，驗證外連家長驗證和資料傳輸，再依實際版本填寫 App 隱私資訊。Kidoz 公開說明人工審查和 iOS 外連年齡關卡，列為後續候選。
+
+- [AdMob 的 app-ads.txt 與 App 驗證](https://support.google.com/admob/answer/14538460)
+- [Google Play Families 規範](https://support.google.com/googleplay/android-developer/answer/18265346)
+- [Apple 兒童類別審查要求](https://developer.apple.com/app-store/review/#incomplete-information) · [Kidoz 素材政策](https://www.kidoz.net/privacy-policies)
+
+### Android AdMob 測試
+
+```sh
+npm run mobile:sync -- android
+cd android
+./gradlew :app:assembleDebug -PadmobPaperTest=true -PadmobTestEntitlement=notPurchased
+```
+
+測試 APK 是 `android/app/build/outputs/apk/debug/app-debug.apk`，識別碼 `tw.mic1201.littlecolorgarden.adtest`。BlueStacks 可用側欄「APK」安裝，或開啟本機 ADB 後以 `adb install -r` 更新。首次預設固定測試橫幅。從「大人幫手 → 廣告與購買」可切換畫板上方格式，並選「模擬顯示」或「模擬已移除」全螢幕插播。測試模式只影響廣告行為。可在 `adb logcat -s LCGAdMobTest` 查詢廣告載入和顯示結果。
+
+### iOS 測試
+
+在專案根目錄執行 `npm run mobile:sync -- ios`，用 Xcode 開啟 `ios/App/App.xcodeproj`，選擇 iPhone 或 iPad 模擬器後執行。
+
+- **App** 使用本機 `UnlockBoards.storekit` 測試 `unlock_all_boards`（NT$60）。依序測試免費畫板、上鎖提示、家長驗證、取消、購買、重開 App 及恢復購買。在 Xcode 27 的 Device Hub 使用「Device → Face ID」或「Device → Touch ID」模擬驗證。
+- **AdMobTest** 是獨立的開發測試版，使用 `RemoveAds.storekit` 去廣告商品，以及 Google 官方插播與原生測試單元。預載成功後切換不同的畫板，應顯示全螢幕測試廣告。關閉後等下一則載入，再換一張畫板。買斷或恢復新商品後，再切換畫板確認不顯示插播。回到直向畫板，確認原生廣告仍可載入，載入時畫板位置不變。Xcode 主控台以 `LCGAdMobTest` 標示廣告結果。
+- **AdMobTest** 在「大人幫手 → 廣告與購買 → 畫板上方廣告格式」可切換 Google 原生測試廣告或 320 × 50 固定測試橫幅。首次預設固定橫幅。兩種格式共用畫板上方的廣告列，重開 App 會保留上次選擇。
+- **AdMobTest** 在「大人幫手 → 廣告與購買 → 全螢幕廣告測試」可模擬顯示插播、模擬已移除插播或依 StoreKit 購買狀態。重開 App 會回到 StoreKit 狀態。
+- 實機測試時，選擇已配對的 iPhone 作為 Xcode 執行裝置，替 **AdMobTest** 選定開發簽署團隊，再直接從 Xcode 執行。測試付款請保留該次 Xcode 執行工作階段，以使用本機 StoreKit 設定。
 
 ### 1.1.0
 
 - 點外層的筆圖示開啟工具選單，可選畫桶或畫筆。彩虹畫桶每次填色會抽出不同漸層。
 - 圖案內塗色達到 97% 會解鎖動畫及寶箱。右上角可播放或暫停動畫，寶箱收藏可從右下角禮物按鈕拖到畫布。
-- 同一個動畫部位覆蓋相連手繪筆跡的面積超過 60% 時，整塊筆跡會跟著動。暫停會回到原畫。
+- 動畫部位內的手繪筆跡會與線稿一起動，相連且延伸到背景的筆跡也會跟著動。暫停會回到原畫。
 
 ### 1.0.9 試用版
 

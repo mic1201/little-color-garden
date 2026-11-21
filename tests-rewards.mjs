@@ -193,25 +193,80 @@ assert.equal(motionPartAt('whale-clean', whale, {x:211,y:435}), -1);
 const brushInk = new Uint8ClampedArray(W * H * 4);
 for (let x = 100; x <= 380; x++) brushInk[(450 * W + x) * 4 + 3] = 128;
 for (let x = 300; x <= 350; x++) brushInk[(460 * W + x) * 4 + 3] = 128;
+brushInk[(460 * W + 100) * 4 + 3] = 128;
 const movingInk = inkMotionOwners(brushInk, whaleOwners);
 assert.equal(whaleOwners[450 * W + 350], 1);
-assert.equal(movingInk[450 * W + 350], 0, 'an ink line below the coverage threshold stays entirely still');
+assert.equal(movingInk[450 * W + 350], 1, 'the part of a wide stroke inside the whale still moves');
+assert.equal(movingInk[450 * W + 100], 1, 'the overshoot moves too, leaving no cutout in the wide stroke');
+assert.equal(movingInk[460 * W + 100], 0, 'an isolated background mark stays still');
 assert.equal(movingInk[460 * W + 350], 1, 'ink wholly on the whale moves with it');
 
 const turtle = motionFor('sea-turtle-clean');
 const turtleOwners = motionGeometry('sea-turtle-clean', turtle);
 const turtleInk = new Uint8ClampedArray(W * H * 4);
 for (let x = 320; x <= 760; x++) turtleInk[(337 * W + x) * 4 + 3] = 255;
-for (let x = 770; x <= 960; x++) turtleInk[(510 * W + x) * 4 + 3] = 255;
+for (let x = 900; x <= 960; x++) turtleInk[(510 * W + x) * 4 + 3] = 255;
 const turtleMotion = inkMotionOwners(turtleInk, turtleOwners);
 assert.equal(turtleOwners[337 * W + 760], 0);
 assert(turtleMotion.slice(337 * W + 320, 337 * W + 761).every(owner => owner === 1), 'the entire stroke moves, including the overhang');
-assert(turtleMotion.slice(510 * W + 770, 510 * W + 961).every(owner => owner === 0), 'a mostly outside stroke stays put');
+assert(turtleMotion.slice(510 * W + 900, 510 * W + 961).every(owner => owner === 0), 'a background stroke stays put');
 
 const connectedInk = new Uint8ClampedArray(10 * 4);
 for (let i = 3; i < connectedInk.length; i += 4) connectedInk[i] = 255;
-assert.deepEqual([...inkMotionOwners(connectedInk, Uint8Array.of(1,1,1,1,1,1,2,2,0,0), 10)], Array(10).fill(0));
-assert.deepEqual([...inkMotionOwners(connectedInk, Uint8Array.of(1,1,1,1,1,1,1,2,0,0), 10)], Array(10).fill(1));
+const sharedGeometry = Uint8Array.of(1,1,1,1,1,1,2,2,0,0);
+assert.deepEqual([...inkMotionOwners(connectedInk, sharedGeometry, 10)], [1,1,1,1,1,1,2,2,1,1]);
+assert.deepEqual([...inkMotionOwners(connectedInk, Uint8Array.of(1,1,1,1,1,1,1,2,0,0), 10)], [1,1,1,1,1,1,1,2,1,1]);
+assert.deepEqual([...inkMotionOwners(connectedInk, Uint8Array.of(1,1,1,1,1,1,1,2,255,0), 10)],
+  [1,1,1,1,1,1,1,2,0,1], 'ink on stationary line art stays attached to that art');
+
+const boatRegions = getFillRegions('sailboat');
+const boatInk = new Uint8ClampedArray(W * H * 4);
+for (let i = 3; i < boatInk.length; i += 4) boatInk[i] = 128;
+const boatCoverage = countPaintedArea(boatRegions, [], boatInk);
+assert.equal(boatCoverage.painted, boatCoverage.total);
+assert(boatCoverage.total < W * H * .6);
+const boatMotion = inkMotionOwners(boatInk, motionGeometry('sailboat', motionFor('sailboat')));
+for (const {spans} of boatRegions) {
+  for (const [y, left, right] of spans) {
+    assert(boatMotion.subarray(y * W + left, y * W + right).every(owner => owner === 1),
+      'every painted pixel counted toward completion follows the boat');
+  }
+}
+assert.equal(boatMotion[10 * W + 10], 1, 'attached brush marks retain their shape beyond the boat');
+
+const boatParts = motionFor('sailboat');
+const sun = {x:780,y:180};
+const sunRays = [{x:780,y:60},{x:780,y:300},{x:660,y:180},{x:900,y:180}];
+const sunOutline = {x:835,y:180};
+for (const point of [sun, sunOutline, ...sunRays]) {
+  assert.equal(motionPartAt('sailboat', boatParts, point), 0, 'the sun and all its rays move together');
+}
+assert.equal(motionPartAt('sailboat', boatParts, {x:500,y:810}), -1);
+for (let time = 0; time < 9; time += .05) {
+  const center = transformSticker(boatParts[0], sun, time);
+  for (const point of sunRays) {
+    const next = transformSticker(boatParts[0], point, time);
+    assert(Math.abs(Math.hypot(next.x - center.x, next.y - center.y) - 120) < 1e-6);
+    assert(next.x > 6 && next.x < W - 6 && next.y > 6 && next.y < H - 6, 'the full ray stays on the paper');
+  }
+}
+
+const gardenCastle = motionFor('castle-garden-clean');
+for (const [x,y] of [[820,145],[820,80],[820,210],[755,145],[885,145],[774,99],[866,99],[774,191],[866,191]]) {
+  assert.equal(motionPartAt('castle-garden-clean', gardenCastle, {x,y}), 0, 'the garden sun moves with the flag it crosses');
+}
+assert.equal(motionPartAt('castle-garden-clean', gardenCastle, {x:770,y:205}), 0, 'the castle flag moves with its tower');
+assert.equal(motionPartAt('castle-garden-clean', gardenCastle, {x:500,y:769}), -1, 'the garden path stays in the background');
+
+for (const id of ['rabbit-clean', 'rocket-clean', 'princess-castle-clean']) {
+  const [part] = motionFor(id);
+  const [top, rows] = paperMasks[id];
+  const upperOutline = rows.slice(0, 16).flatMap((row, i) => row.map(x => ({x, y:top + i})));
+  for (let time = 0; time < 15; time += .05) {
+    assert(upperOutline.every(point => transformSticker(part, point, time).y > 4),
+      `${id}: upper outline stays visible throughout the animation`);
+  }
+}
 
 assert.equal(stickers.length, 30);
 assert.equal(new Set(stickers.map(([id]) => id)).size, 30);

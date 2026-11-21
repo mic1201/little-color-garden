@@ -1,3 +1,4 @@
+import {setupAdultActions} from './dist/adult-actions.js';
 import * as spectrumFunctions from './dist/color-spectrum.js';
 import {createMusic} from './dist/music.js';
 import * as paper from './dist/paper.js';
@@ -10,7 +11,7 @@ const els=new Map(),store=new Map(),context=new Proxy({},{get:(t,k)=>t[k]||(()=>
 context.createLinearGradient=()=>({addColorStop(){}});
 globalThis.Image=class {set src(v){queueMicrotask(()=>this.onload())}};
 class E{constructor(){this.style={};this.dataset={};this.children=[];this.events={};this.attrs={};this.open=false;this.classList={toggle(){}}}setAttribute(k,v){this.attrs[k]=v}append(...x){this.children.push(...x)}replaceChildren(...x){this.children=x}addEventListener(k,f){this.events[k]=f}play(){return Promise.resolve()}pause(){}focus(){}click(){}toBlob(cb){cb(new Blob(["png"],{type:"image/png"}))}getContext(){return context}getBoundingClientRect(){return {left:10,top:20,width:500,height:450}}setPointerCapture(id){this.cap=id}hasPointerCapture(id){return this.cap===id}releasePointerCapture(){this.cap=null}showModal(){this.open=true}close(){this.open=false;this.classList={toggle(){}}}}
-const get=s=>{if(!els.has(s))els.set(s,new E);return els.get(s)};const document={querySelector:get,createElement:()=>new E,querySelectorAll:s=>[...els.values()].flatMap(e=>e.children).filter(e=>e.className===s.slice(1)),addEventListener(){},hidden:false,documentElement:new E,body:new E};let timers=[];const window={addEventListener(){}};const localStorage={getItem:k=>store.get(k),setItem:(k,v)=>store.set(k,v)};let src=fs.readFileSync('./dist/app.js','utf8').replace(/^import .*;\n/gm,'');src+='\nreturn {getState:()=>state, getActive:()=>active,save,render,finish,exportMarkup,fit,getView:()=>view};';const keys=[...Object.keys(paper),...Object.keys(engine),...Object.keys(pats),...Object.keys(viewport),...Object.keys(brushUI),...Object.keys(numberGuides),...Object.keys(fillRegions),...Object.keys(fills),...Object.keys(spectrumFunctions),'createMusic'];const run=new Function(...keys,'document','window','localStorage','requestAnimationFrame','setTimeout','clearTimeout',src);const api=run(...Object.values(paper),...Object.values(engine),...Object.values(pats),...Object.values(viewport),...Object.values(brushUI),...Object.values(numberGuides),...Object.values(fillRegions),...Object.values(fills),...Object.values(spectrumFunctions),createMusic,document,window,localStorage,()=>1,f=>(timers.push(f),timers.length),()=>{});
+const get=s=>{if(!els.has(s))els.set(s,new E);return els.get(s)};const document={querySelector:get,createElement:()=>new E,querySelectorAll:s=>[...els.values()].flatMap(e=>e.children).filter(e=>e.className===s.slice(1)),addEventListener(){},hidden:false,documentElement:new E,body:new E};let timers=[];const window={addEventListener(){}};const localStorage={getItem:k=>store.get(k),setItem:(k,v)=>store.set(k,v)};let src=fs.readFileSync('./dist/app.js','utf8').replace(/^import .*;\n/gm,'');src+='\nreturn {getState:()=>state, getActive:()=>active,save,render,finish,exportMarkup,fit,getView:()=>view};';const keys=[...Object.keys(paper),...Object.keys(engine),...Object.keys(pats),...Object.keys(viewport),...Object.keys(brushUI),...Object.keys(numberGuides),...Object.keys(fillRegions),...Object.keys(fills),...Object.keys(spectrumFunctions),'createMusic','setupAdultActions'];const run=new Function(...keys,'document','window','localStorage','requestAnimationFrame','setTimeout','clearTimeout',src);const api=run(...Object.values(paper),...Object.values(engine),...Object.values(pats),...Object.values(viewport),...Object.values(brushUI),...Object.values(numberGuides),...Object.values(fillRegions),...Object.values(fills),...Object.values(spectrumFunctions),createMusic,setupAdultActions,document,window,localStorage,()=>1,f=>(timers.push(f),timers.length),()=>{});
 const cv=get('#ink');const event=(id,x,y,more={})=>({pointerId:id,clientX:x,clientY:y,pointerType:'touch',isPrimary:true,preventDefault(){},...more});cv.events.pointerdown(event(1,10,20));cv.events.pointermove(event(1,260,245));cv.events.pointerdown(event(2,200,200,{isPrimary:false}));assert.equal(api.getActive().points.length,2);cv.events.pointerup(event(2,200,200));assert.equal(api.getState().strokes.length,0);cv.events.pointerup(event(1,260,245));assert.equal(api.getState().strokes.length,1);assert.deepEqual(api.getState().strokes[0].points[1],{x:500,y:450});get('#undo').onclick();assert.equal(api.getState().strokes.length,0);get('#redo').onclick();assert.equal(api.getState().strokes.length,1);const cat=get('#patterns').children.find(e=>e.dataset.id==='cat-clean');cat.onclick();assert(get('#confirm-dialog').open);get('#cancel').onclick();assert.equal(api.getState().strokes.length,1);cat.onclick();get('#confirm').onclick();assert.equal(api.getState().pattern,'cat-clean');assert.equal(api.getState().strokes.length,0);api.save();assert.equal(JSON.parse([...store.values()][0]).pattern,'cat-clean');console.log('PASS fake DOM pointer mapping, multi-touch guard, finish, undo/redo, pattern confirmation cancel/confirm, serialized local save');
 
 await get("#export").onclick();assert.equal(get("#export-preview").children.length,2);assert.match(get("#export-preview").children[1].download,/png$/);assert.equal(get("#export").disabled,false);console.log("PASS fake DOM export resolves and exposes downloadable preview (pixel composition not tested)");
@@ -237,7 +238,22 @@ const previousArt = {
 };
 els.clear();
 store.set('little-color-garden-v1', JSON.stringify(previousArt));
-const restored = run(...Object.values(paper),...Object.values(engine),...Object.values(pats),...Object.values(viewport),...Object.values(brushUI),...Object.values(numberGuides),...Object.values(fillRegions),...Object.values(fills),...Object.values(spectrumFunctions),createMusic,document,window,localStorage,()=>1,()=>1,()=>{});
+let adPreloads = 0;
+let closePaperAd;
+const adRequests = [];
+window.Capacitor = {
+  isNativePlatform: () => true,
+  getPlatform: () => 'android',
+  isPluginAvailable: (name) => name === 'DrawingAds',
+  Plugins: {DrawingAds: {
+    async preparePaperAd() { adPreloads++; },
+    showPaperAd() {
+      adRequests.push(restored.getState().pattern);
+      return new Promise(resolve => { closePaperAd = resolve; });
+    },
+  }},
+};
+const restored = run(...Object.values(paper),...Object.values(engine),...Object.values(pats),...Object.values(viewport),...Object.values(brushUI),...Object.values(numberGuides),...Object.values(fillRegions),...Object.values(fills),...Object.values(spectrumFunctions),createMusic,setupAdultActions,document,window,localStorage,()=>1,()=>1,()=>{});
 assert.equal(restored.getState().pattern, previousArt.pattern);
 assert.equal(restored.getState().fillMode, true);
 assert.equal(bucketTool().attrs['aria-pressed'],'true');
@@ -247,8 +263,124 @@ assert(!('numbers' in restored.getState()));
 assert(!restored.exportMarkup().includes('<text'));
 const legacyButton = get('#patterns').children.find(p=>p.dataset.id==='rabbit-garden');
 assert.match(legacyButton.attrs['aria-label'], /舊稿/);
-get('#patterns').children.find(p=>p.dataset.id==='rabbit-garden-v2-clean').onclick();
+const newBoard = get('#patterns').children.find(p=>p.dataset.id==='rabbit-garden-v2-clean');
+assert.equal(adPreloads, 1);
+legacyButton.onclick();
+assert.deepEqual(adRequests, []);
+newBoard.onclick();
 assert(get('#confirm-dialog').open);
+assert.deepEqual(adRequests, []);
 get('#cancel').onclick();
 assert.deepEqual(restored.getState().fills, previousArt.fills);
+assert.deepEqual(adRequests, []);
 console.log('PASS older drawings retain their original outlines, saved fills and tap-fill selection.');
+
+newBoard.onclick();
+const switchingBoard = get('#confirm').onclick();
+assert.deepEqual(adRequests, ['rabbit-garden']);
+assert.equal(restored.getState().pattern, 'rabbit-garden');
+const blankBoard = get('#patterns').children.find(p=>p.dataset.id==='blank');
+blankBoard.onclick();
+assert.deepEqual(adRequests, ['rabbit-garden']);
+closePaperAd({status:'dismissed'});
+await switchingBoard;
+assert.equal(restored.getState().pattern, 'rabbit-garden-v2-clean');
+
+const switchingToBlank = blankBoard.onclick();
+assert.deepEqual(adRequests, ['rabbit-garden', 'rabbit-garden-v2-clean']);
+closePaperAd({status:'skipped'});
+await switchingToBlank;
+assert.equal(restored.getState().pattern, 'blank');
+
+window.navigator = {onLine: false};
+newBoard.onclick();
+assert.equal(restored.getState().pattern, 'rabbit-garden-v2-clean');
+assert.equal(adRequests.length, 2);
+
+els.clear();
+store.delete('little-color-garden-v1');
+let iosAdRequests = 0;
+let iosAdPreloads = 0;
+window.Capacitor = {
+  isNativePlatform: () => true,
+  getPlatform: () => 'ios',
+  isPluginAvailable: (name) => name === 'PaperTestAds',
+  Plugins: {PaperTestAds: {
+    async preparePaperAd() { iosAdPreloads++; },
+    async showPaperAd() { iosAdRequests++; },
+  }},
+};
+window.navigator = {onLine: true};
+const ios = run(...Object.values(paper),...Object.values(engine),...Object.values(pats),...Object.values(viewport),...Object.values(brushUI),...Object.values(numberGuides),...Object.values(fillRegions),...Object.values(fills),...Object.values(spectrumFunctions),createMusic,setupAdultActions,document,window,localStorage,()=>1,()=>1,()=>{});
+assert.equal(iosAdPreloads, 1);
+assert.equal(get('#test-ads-privacy').hidden, false);
+const iosBoard = get('#patterns').children.find(p=>p.dataset.id==='rabbit-garden-v2-clean');
+iosBoard.onclick();
+assert.equal(iosAdRequests, 1);
+iosBoard.onclick();
+assert.equal(iosAdRequests, 1);
+window.navigator.onLine = false;
+get('#patterns').children.find(p=>p.dataset.id==='blank').onclick();
+assert.equal(ios.getState().pattern, 'blank');
+assert.equal(iosAdRequests, 1);
+console.log('PASS Android opens the next board after dismissal or no fill, prevents duplicate transitions and works offline. iOS test ad flow stays intact.');
+
+els.clear();
+store.set('little-color-garden-v1', JSON.stringify(previousArt));
+let checkedAccess = 0;
+let checkedPrice = 0;
+let unlockedBoards = false;
+let onStoreEntitlement;
+get('#purchase-controls').hidden = true;
+window.Capacitor = {
+  isNativePlatform: () => true,
+  getPlatform: () => 'ios',
+  isPluginAvailable: (name) => name === 'DrawingStore',
+  Plugins: {DrawingStore: {
+    async getBoardAccess() { checkedAccess++; return {entitlement: 'notPurchased'}; },
+    async getState() {
+      checkedPrice++;
+      return {price: 'NT$60', entitlement: unlockedBoards ? 'purchased' : 'notPurchased'};
+    },
+    async authorizeParent() { return {status: 'authorized', hasPIN: false}; },
+    async purchase() {
+      unlockedBoards = true;
+      onStoreEntitlement({entitlement: 'purchased'});
+      return {entitlement: 'purchased'};
+    },
+    async lockParent() {},
+    addListener(_name, callback) { onStoreEntitlement = callback; },
+  }},
+};
+const paidIos = run(...Object.values(paper),...Object.values(engine),...Object.values(pats),...Object.values(viewport),...Object.values(brushUI),...Object.values(numberGuides),...Object.values(fillRegions),...Object.values(fills),...Object.values(spectrumFunctions),createMusic,setupAdultActions,document,window,localStorage,()=>1,()=>1,()=>{});
+await new Promise(setImmediate);
+assert.equal(checkedAccess, 1);
+assert.equal(checkedPrice, 0);
+const availableIosBoards = get('#patterns').children;
+const premium = availableIosBoards.find(button => button.dataset.id === 'island-turtle-clean');
+assert.equal(availableIosBoards.filter(button => button.attrs['data-locked'] === 'true').length, 23);
+assert.equal(premium.attrs['data-locked'], 'true');
+assert.equal(availableIosBoards.find(button => button.dataset.id === 'whale-clean').attrs['data-locked'], 'false');
+
+get('#pattern-open').onclick();
+premium.onclick();
+assert(get('#locked-board-dialog').open);
+assert.deepEqual(paidIos.getState().fills, previousArt.fills);
+assert.equal(paidIos.getState().pattern, previousArt.pattern);
+assert.equal(checkedPrice, 0, 'purchase price stays behind the parent gate');
+get('#locked-board-parent').onclick();
+await new Promise(setImmediate);
+assert.equal(checkedPrice, 1);
+assert.match(get('#remove-ads').textContent, /解鎖所有畫板 NT\$60/);
+assert.equal(get('#interstitial-test-controls').hidden, true);
+await get('#remove-ads').onclick();
+assert.equal(get('#purchase-status').textContent, '所有畫板已解鎖。');
+assert.equal(premium.attrs['data-locked'], 'false');
+get('[data-close]').onclick();
+get('#parent-dialog').events.close();
+get('#pattern-open').onclick();
+premium.onclick();
+assert(get('#confirm-dialog').open, 'switching a paid board still protects current artwork');
+get('#confirm').onclick();
+assert.equal(paidIos.getState().pattern, premium.dataset.id);
+console.log('PASS iOS free catalog, locked-board prompt, parental gate, price, and immediate board unlocking.');

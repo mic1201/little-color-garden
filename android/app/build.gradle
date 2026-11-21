@@ -1,5 +1,34 @@
 apply plugin: 'com.android.application'
 
+def admobPaperTest = providers.gradleProperty('admobPaperTest').orElse('false').get() == 'true'
+
+def localAndroidProperties = new Properties()
+def localAndroidFile = rootProject.file('local.properties')
+if (localAndroidFile.isFile()) {
+    localAndroidFile.withInputStream { localAndroidProperties.load(it) }
+}
+def adValue = { name ->
+    providers.gradleProperty(name).orElse(localAndroidProperties.getProperty(name, '')).get().trim()
+}
+def releaseAppId = adValue('admobAndroidAppId')
+def releaseBannerId = adValue('admobAndroidBannerId')
+def releaseInterstitialId = adValue('admobAndroidInterstitialId')
+def releaseAds = releaseAppId || releaseBannerId || releaseInterstitialId
+def samplePublisher = 'ca-app-pub-3940256099942544'
+if (releaseAds) {
+    if (!(releaseAppId ==~ /ca-app-pub-[0-9]{16}~[0-9]{10}/) || releaseAppId.startsWith(samplePublisher + '~')) {
+        throw new GradleException('Set admobAndroidAppId to the production Android app ID from AdMob.')
+    }
+    def publisher = releaseAppId.split('~', 2)[0]
+    def validUnit = { id -> id.startsWith(publisher + '/') && id ==~ /ca-app-pub-[0-9]{16}\/[0-9]{10}/ }
+    if (!validUnit(releaseBannerId)) {
+        throw new GradleException('Set admobAndroidBannerId to the production banner ad unit for this publisher.')
+    }
+    if (releaseInterstitialId && (!validUnit(releaseInterstitialId) || releaseInterstitialId == releaseBannerId)) {
+        throw new GradleException('Set admobAndroidInterstitialId to a separate production interstitial ad unit for this publisher.')
+    }
+}
+
 android {
     namespace = "tw.mic1201.littlecolorgarden"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +36,9 @@ android {
         applicationId "tw.mic1201.littlecolorgarden"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 15
+        versionCode 22
         versionName "1.2.3"
+        resValue 'string', 'play_billing_public_key', adValue('playBillingPublicKey')
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -19,10 +49,34 @@ android {
     buildTypes {
         debug {
             versionNameSuffix '-test'
+            if (admobPaperTest) {
+                applicationIdSuffix '.adtest'
+                versionNameSuffix '-admob-test'
+            }
+            resValue 'bool', 'admob_debug_ads', 'true'
+            resValue 'string', 'admob_banner_id', samplePublisher + '/6300978111'
+            resValue 'string', 'admob_native_id', samplePublisher + '/2247696110'
+            resValue 'string', 'admob_interstitial_id', admobPaperTest ? samplePublisher + '/1033173712' : ''
+            resValue 'string', 'admob_test_entitlement', providers.gradleProperty('admobTestEntitlement').orElse('').get()
         }
         release {
+            if (releaseAds) {
+                manifestPlaceholders.admobAppId = releaseAppId
+                resValue 'bool', 'admob_debug_ads', 'false'
+                resValue 'string', 'admob_banner_id', releaseBannerId
+                resValue 'string', 'admob_native_id', ''
+                resValue 'string', 'admob_interstitial_id', releaseInterstitialId
+                resValue 'string', 'admob_test_entitlement', ''
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    sourceSets {
+        debug.java.srcDir 'src/admob/java'
+        if (releaseAds) {
+            release.java.setSrcDirs(['src/admob/java'])
+            release.manifest.srcFile 'src/admob/AndroidManifest.xml'
         }
     }
 }
@@ -39,6 +93,9 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    implementation 'com.android.billingclient:billing:9.1.0'
+    debugImplementation 'com.google.android.gms:play-services-ads:25.5.0'
+    if (releaseAds) releaseImplementation 'com.google.android.gms:play-services-ads:25.5.0'
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

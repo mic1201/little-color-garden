@@ -166,7 +166,7 @@ const scenes = {
       wave([239,137,758,833], t => {
         const phase = t % 4.9;
         const flight = ease((phase - .36) / 1.18) - ease((phase - 2.08) / 1.7);
-        return {dx: 3 * oscillate(t, .19) * (1 - flight), dy: -150 * flight, angle: -5 * flight, pivot: [500,608]};
+        return {dx: 3 * oscillate(t, .19) * (1 - flight), dy: -138 * flight, angle: -5 * flight, pivot: [500,608]};
       }),
       [[310,137],[700,137],[700,438],[758,459],[758,833],[239,833],[239,438],[310,420]]
     ),
@@ -187,7 +187,12 @@ const scenes = {
     })),
     detail: (ctx, t) => bubbles(ctx, t, [889,469])
   }],
-  'rabbit-clean': [wave([267,105,733,814], t => rabbitHop(t, 133, [500,793]))],
+  'rabbit-clean': [wave([267,105,733,814], t => {
+    const pose = rabbitHop(t, 133, [500,793]);
+    const [, pivotY] = pose.pivot;
+    const earHeight = pivotY - paperMasks['rabbit-clean'][0];
+    return {...pose, scaleY: Math.min(pose.scaleY, (pivotY + pose.dy - 8) / earHeight)};
+  })],
   'elephant-clean': [{
     rect: [144,186,854,786], axis: 'y',
     offset(y,t) {
@@ -226,8 +231,8 @@ const scenes = {
     return {dx:travelAndReturn(driving, 4.4, 88), dy:-7 * bounce(driving, .52),
       angle:.75 * oscillate(driving, .52), pivot:[500,735]};
   })],
-  sailboat: [wave([156,93,845,774], t => ({
-    dx: 25 * oscillate(t, 4.4), dy: -37 * swell(t, 2.2), angle: 11 * oscillate(t, 4.4), pivot: [500,679]
+  sailboat: [wave([156,48,912,774], t => ({
+    dx: 25 * oscillate(t, 4.4), dy: -14 * swell(t, 2.2), angle: 6 * oscillate(t, 4.4), pivot: [500,679]
   }))],
   'parrot-cute-clean': [{
     rect: [279,91,721,727], axis: 'x',
@@ -254,10 +259,11 @@ const scenes = {
     const nod = bounce(t, 2.65);
     return {dx: -29 * swell(t, 4.7), angle: -6 * nod, scaleY: 1 - .11 * nod, pivot: [519,687]};
   })],
-  'castle-garden-clean': [{
-    ...wave([185,104,815,686], t => ({scaleY: 1 + .012 * swell(t, 4.8), pivot: [500,673]})),
+  // The upper-right flag crosses a ray, so the sun moves with the castle.
+  'castle-garden-clean': [cutout({
+    ...wave([185,52,914,686], t => ({scaleY: 1 + .012 * swell(t, 4.8), pivot: [500,673]})),
     detail: litWindows([[287,504,26,41],[500,407,25,36],[713,504,26,41]])
-  }],
+  }, [[185,104],[729,104],[729,52],[914,52],[914,235],[815,235],[815,686],[185,686]])],
   'halloween-photo-v4-clean': [
     wave([720,288,891,461], t => ({
       dx: 26 * oscillate(t, 3.9), dy: -68 * swell(t, 3.9), scaleY: 1 - .12 * swell(t, 1.95), pivot: [792,380]
@@ -286,7 +292,7 @@ export function motionFor(pattern) {
 }
 
 const PIXELS = W * H;
-const INK_FOLLOW_THRESHOLD_PERCENT = 60;
+const STATIC_PART = 255;
 const WARP_PADDING = 64;
 let lastGeometry;
 
@@ -330,8 +336,8 @@ function visitComponents(mask, visit, width = W) {
   }
 }
 
-export function motionGeometry(pattern, parts) {
-  if (lastGeometry?.pattern === pattern && lastGeometry.parts === parts) return lastGeometry.owners;
+function getMotionGeometry(pattern, parts) {
+  if (lastGeometry?.pattern === pattern && lastGeometry.parts === parts) return lastGeometry;
   const [top, rows] = paperMasks[pattern] ?? [0, []];
   const mask = new Uint8Array(PIXELS);
   for (const [i, row] of rows.entries()) {
@@ -340,7 +346,7 @@ export function motionGeometry(pattern, parts) {
   }
 
   const owners = new Uint8Array(PIXELS);
-  if (!parts.length) return owners;
+  if (!parts.length) return {owners};
   const coverage = new Uint32Array(parts.length);
   visitComponents(mask, (pixels, length) => {
     coverage.fill(0);
@@ -351,18 +357,18 @@ export function motionGeometry(pattern, parts) {
       if (part !== -1) coverage[part]++;
     }
     const winner = coverage.indexOf(Math.max(...coverage));
-    const owner = coverage[winner] * 2 > length ? winner + 1 : 255;
+    const owner = coverage[winner] * 2 > length ? winner + 1 : STATIC_PART;
     const fixedBelow = parts[winner].fixedBelow ?? H;
     for (let i = 0; i < length; i++) {
       const pixel = pixels[i];
-      owners[pixel] = pixel >= fixedBelow * W ? 255 : owner;
+      owners[pixel] = pixel >= fixedBelow * W ? STATIC_PART : owner;
     }
   });
-  // 255 marks a static component. Padding can take empty edge pixels only.
+  // Padding can take empty edge pixels only, leaving static art intact.
   const padded = owners.slice();
   for (let i = 0; i < PIXELS; i++) {
     const owner = owners[i];
-    if (!owner || owner === 255) continue;
+    if (!owner || owner === STATIC_PART) continue;
     const x = i % W;
     for (let dy = -W; dy <= W; dy += W) {
       const from = x ? -1 : 0;
@@ -373,9 +379,13 @@ export function motionGeometry(pattern, parts) {
       }
     }
   }
-  for (let i = 0; i < PIXELS; i++) if (padded[i] === 255) padded[i] = 0;
   lastGeometry = {pattern, parts, owners: padded};
-  return padded;
+  return lastGeometry;
+}
+
+export function motionGeometry(pattern, parts) {
+  const geometry = getMotionGeometry(pattern, parts);
+  return geometry.moving ??= geometry.owners.map(owner => owner === STATIC_PART ? 0 : owner);
 }
 
 export function motionPartAt(pattern, parts, {x, y}) {
@@ -392,12 +402,18 @@ export function inkMotionOwners(rgba, geometry, width = W) {
     coverage.fill(0);
     let winner = 0;
     for (let i = 0; i < length; i++) {
-      const part = geometry[pixels[i]];
+      const pixel = pixels[i];
+      const part = geometry[pixel];
+      if (part === STATIC_PART) continue;
+      owners[pixel] = part;
       if (part && ++coverage[part] > coverage[winner]) winner = part;
     }
-    // Background pixels count toward the component size.
-    if (coverage[winner] * 100 <= length * INK_FOLLOW_THRESHOLD_PERCENT) return;
-    for (let i = 0; i < length; i++) owners[pixels[i]] = winner;
+    // Carry attached overflow to avoid cutting an outline-shaped hole in a brush mark.
+    if (!winner) return;
+    for (let i = 0; i < length; i++) {
+      const pixel = pixels[i];
+      if (!geometry[pixel]) owners[pixel] = winner;
+    }
   }, width);
   return owners;
 }
@@ -430,7 +446,7 @@ function rasterPaths(owners, count, width, height) {
     const row = y * width;
     for (let x = 0; x < width;) {
       const owner = owners[row + x];
-      if (!owner) {
+      if (!owner || owner === STATIC_PART) {
         x++;
         continue;
       }
@@ -479,7 +495,7 @@ function addBackdrop(context, state, {area, sx, sy}) {
 export function createMotionScene(state, art, parts) {
   const {width, height} = art.paper;
   const raster = {area: art.area, width, height, sx: width / art.area.width, sy: height / art.area.height};
-  const geometry = projectGeometry(motionGeometry(state.pattern, parts), raster);
+  const geometry = projectGeometry(getMotionGeometry(state.pattern, parts).owners, raster);
   const masks = rasterPaths(geometry, parts.length, width, height);
   const hasInk = state.strokes.some(stroke => stroke.tool !== 'eraser');
   const inkMasks = hasInk ? rasterPaths(inkMotionOwners(art.ink.getContext('2d').getImageData(0, 0, width, height).data, geometry, width), parts.length, width, height) : null;
@@ -499,7 +515,7 @@ export function createMotionScene(state, art, parts) {
     const inkMask = inkMasks?.layers[i];
     let bounds = mask.bounds;
     if (inkMask) {
-      // The whole assigned ink component can extend beyond the silhouette.
+      // Assigned ink can extend beyond the silhouette.
       colors.clip(inkMask.path);
       colors.drawImage(art.ink, 0, 0);
       bounds = bounds.map((edge, j) => (j < 2 ? Math.min : Math.max)(edge, inkMask.bounds[j]));
@@ -637,8 +653,8 @@ function drawPart(context, part, image, time, raster) {
 export function drawMotionScene(context, scene, time) {
   const {raster} = scene;
   drawLayer(context, scene.base, raster);
-  for (const part of scene.layers) drawPart(context, part, part.colors, time, raster);
   if (scene.stillInk) drawLayer(context, scene.stillInk, raster);
+  for (const part of scene.layers) drawPart(context, part, part.colors, time, raster);
   drawLayer(context, scene.outline, raster);
   for (const part of scene.layers) drawPart(context, part, part.outline, time, raster);
 }

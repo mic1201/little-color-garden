@@ -1,5 +1,6 @@
 import {ORIGINAL_PAPER,paperView,paperPoint,includePoint,rasterSize,beginPaper,paperMarkup} from './paper.js';
 import {createMusic} from './music.js';
+import {setupAdultActions} from './adult-actions.js';
 import {createRewards,rewardExportMarkup} from './rewards.js';
 import {createGameAvatar} from './avatar-game.js';
 import {clampSpectrum,spectrumColor,spectrumName} from './color-spectrum.js';
@@ -7,7 +8,7 @@ import {drawFills,fillTarget,randomFillGradient,RAINBOW_COLORS,validFills} from 
 import {closureSvgMarkup} from './number-patterns.js';
 import {brushes,stamps,updateBrushSummary} from './brush-ui.js';
 import {createFocusMode} from './viewport.js';
-import {patterns,patternCategories,availablePatterns,isLegacyPattern,svgMarkup} from './patterns.js';
+import {patterns,patternCategories,availablePatterns,isLegacyPattern,svgMarkup,freeBoardIds} from './patterns.js';
 import {W,H,MAX_STROKES,MAX_POINTS,coordinate,drawStroke,validDocument,backgroundColor} from './engine.js';
 const $=s=>document.querySelector(s),canvas=$('#ink'),ctx=canvas.getContext('2d'),KEY='little-color-garden-v1';
 const BASIC_COLORS = [
@@ -144,20 +145,69 @@ function addSizeOptions(group) {
 addSizeOptions($('#sizes'));
 syncSize();
 let patternCategory='all';
+let switchingPaper = false;
+const patternDialog = $('#pattern-dialog');
+const lockedBoardDialog = $('#locked-board-dialog');
+function isBoardLocked(id) {
+  return id !== state.pattern && !freeBoardIds.includes(id) && adultActions.hasLockedBoards();
+}
+function updatePatternLocks() {
+  for (const button of document.querySelectorAll('.pattern')) {
+    const locked = isBoardLocked(button.dataset.id);
+    button.setAttribute('data-locked', String(locked));
+    button.setAttribute('aria-label', button.title + (locked ? '畫紙（已上鎖）' : '畫紙'));
+  }
+}
+$('#locked-board-parent').onclick = () => {
+  lockedBoardDialog.close();
+  patternDialog.close();
+  void adultActions.openBoardPurchase();
+};
 function filterPatterns(){document.querySelectorAll('.pattern').forEach(b=>{b.hidden=(b.dataset.legacy==='true'&&b.dataset.id!==state.pattern)||(patternCategory!=='all'&&b.dataset.category!==patternCategory)});document.querySelectorAll('.category-choice').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===patternCategory)));requestAnimationFrame(fit)}
 for(const c of [{id:'all',name:'全部',icon:'✨'},...patternCategories]){const b=document.createElement('button');b.className='category-choice';b.dataset.id=c.id;b.textContent=c.icon;b.title=c.name+'圖案';b.setAttribute('aria-label',c.name+'圖案');b.setAttribute('aria-pressed',String(c.id==='all'));b.onclick=()=>{finish();patternCategory=c.id;filterPatterns()};$('#pattern-categories').append(b)}
 for(const p of availablePatterns(state.pattern)){const b=document.createElement('button');const legacy=isLegacyPattern(p.id);const caption=legacy?p.name+'（舊稿）':p.name;b.className='pattern';b.dataset.id=p.id;b.dataset.category=p.category;b.dataset.legacy=String(legacy);b.setAttribute('aria-pressed',String(p.id===state.pattern));b.innerHTML=(p.id==='blank'?'<span class="blank-icon">✨</span>':outlineMarkup(p.id))+`<span class="${legacy?'legacy-caption':'sr-only'}">${legacy?'舊稿':p.name}</span>`;b.setAttribute('aria-label',caption+'畫紙');b.title=caption;b.onclick=()=>{
-  $('#pattern-dialog').close();
+  if (switchingPaper) return;
+  if (isBoardLocked(p.id)) {
+    lockedBoardDialog.showModal();
+    return;
+  }
+  patternDialog.close();
   if(p.id===state.pattern){avatar?.showDrawing();return}
-  if(state.strokes.length||state.fills?.length||active)ask('換一張圖案嗎？','這張畫會被換掉。喜歡的作品，先請大人幫忙存成圖片。',()=>setPattern(p.id),p.id);
-  else setPattern(p.id);
+  const switchPaper = () => {
+    if (isBoardLocked(p.id)) {
+      patternDialog.showModal();
+      lockedBoardDialog.showModal();
+      return;
+    }
+    const openPaper = () => {
+      setPattern(p.id);
+      updatePatternLocks();
+    };
+    if (window.navigator?.onLine === false || !paperAds) {
+      openPaper();
+      return;
+    }
+    if (androidPaperAds) {
+      switchingPaper = true;
+      app.inert = true;
+      return paperAds.showPaperAd().catch(() => {}).finally(() => {
+        app.inert = false;
+        switchingPaper = false;
+        openPaper();
+      });
+    }
+    openPaper();
+    paperAds.showPaperAd().catch(() => {});
+  };
+  if(state.strokes.length||state.fills?.length||active)ask('換一張圖案嗎？','這張畫會被換掉。喜歡的作品，先請大人幫忙存成圖片。',switchPaper,p.id);
+  else return switchPaper();
 };$('#patterns').append(b)}
 canvas.addEventListener('pointerdown',e=>{if(pointer!==null||!e.isPrimary||(e.pointerType==='mouse'&&e.button!==0))return;e.preventDefault();rewards?.drawingStarted(e.pointerId);if(state.fillMode){const point=pointAt(e.clientX,e.clientY,canvas.getBoundingClientRect());fillAt(point);return}if(state.strokes.length>=MAX_STROKES||state.strokes.reduce((n,s)=>n+s.points.length,0)>=MAX_POINTS-15000){storageWarning('這張畫很豐富了！請大人儲存，再開新畫。');return}pointer=e.pointerId;canvas.setPointerCapture(pointer);active={tool,color,rainbow:tool!=='eraser'&&rainbow,size,stamp:stampShape,seed:crypto.getRandomValues(new Uint32Array(1))[0],points:[pointAt(e.clientX,e.clientY,canvas.getBoundingClientRect())]};rememberPoint(active.points[0]);schedule()});
 canvas.addEventListener('pointermove',e=>{if(e.pointerId!==pointer||!active)return;e.preventDefault();const rect=canvas.getBoundingClientRect();const events=e.getCoalescedEvents?.();for(const ev of events?.length?events:[e]){const p=pointAt(ev.clientX,ev.clientY,rect),last=active.points.at(-1);if(Math.hypot(p.x-last.x,p.y-last.y)>1.3&&active.points.length<14999){active.points.push(p);rememberPoint(p)}}schedule()});
 for(const event of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(event,e=>{if(e.pointerId===pointer)finish()});
 window.addEventListener('blur',finish);window.addEventListener('pagehide',()=>{finish();save()});document.addEventListener('visibilitychange',()=>{if(document.hidden){finish();save()}});window.addEventListener('resize',finish);
 $('#undo').onclick=()=>{finish();const a=history.pop();if(a){if(a.kind==='stroke')state.strokes.pop();else restoreFill(a.region,a.before);redo.push(a)}changed()};$('#redo').onclick=()=>{finish();const a=redo.pop();if(a){if(a.kind==='stroke')state.strokes.push(a.stroke);else restoreFill(a.region,a.after);history.push(a)}changed()};
-$('#parent').onclick=()=>{finish();avatar?.pauseEditor();$('#parent-dialog').showModal()};$('[data-close]').onclick=()=>$('#parent-dialog').close();$('#cancel').onclick=()=>{$('#confirm-dialog').close();confirmAction=null};$('#confirm').onclick=()=>{const action=confirmAction;confirmAction=null;$('#confirm-dialog').close();action?.()};$('#confirm-dialog').addEventListener('cancel',()=>confirmAction=null);
+$('#parent').onclick=()=>{finish();avatar?.pauseEditor();$('#parent-dialog').showModal()};$('[data-close]').onclick=()=>$('#parent-dialog').close();$('#cancel').onclick=()=>{$('#confirm-dialog').close();confirmAction=null};$('#confirm').onclick=()=>{const action=confirmAction;confirmAction=null;$('#confirm-dialog').close();return action?.()};$('#confirm-dialog').addEventListener('cancel',()=>confirmAction=null);
 $('#clear').onclick=()=>{
   $('#parent-dialog').close();
   if(!avatar?.editing){ask('換一張乾淨的紙嗎？','現在的顏色會清掉，圖案保留。請先儲存想留下的作品。',()=>setPattern(state.pattern));return}
@@ -179,8 +229,19 @@ $('#clear').onclick=()=>{
   $('#confirm-dialog').showModal();
 };
 const nativeApp = window.Capacitor?.isNativePlatform();
+const paperAds = nativeApp && ['DrawingAds', 'PaperTestAds', 'ParentTestAds']
+  .map(name => window.Capacitor.isPluginAvailable(name) ? window.Capacitor.Plugins[name] : null)
+  .find(Boolean);
+const androidPaperAds = Boolean(paperAds && window.Capacitor.getPlatform?.() === 'android');
+if (paperAds) {
+  const preparePaperAd = () => { paperAds.preparePaperAd().catch(() => {}); };
+  preparePaperAd();
+  window.addEventListener('online', preparePaperAd);
+}
 const exportButton = $('#export');
 const exportLabel = nativeApp ? '分享作品 PNG' : '↓ 儲存作品 PNG';
+const adultActions = setupAdultActions(document, nativeApp ? window.Capacitor : null, updatePatternLocks);
+updatePatternLocks();
 if (nativeApp) {
   addSizeOptions($('#size-options'));
   syncSize();
@@ -261,7 +322,7 @@ async function createArtworkPng() {
   return png;
 }
 
-async function shareArtwork(png) {
+async function shareArtwork(png, confirmed) {
   const {Filesystem, Share} = window.Capacitor.Plugins;
   const dataUrl = await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -275,6 +336,7 @@ async function shareArtwork(png) {
     data: dataUrl.slice(dataUrl.indexOf(',') + 1),
     recursive: true
   });
+  if (!confirmed()) return;
   try {
     await Share.share({files: [uri], dialogTitle: '分享小小畫作'});
   } catch (error) {
@@ -283,6 +345,11 @@ async function shareArtwork(png) {
 }
 
 exportButton.onclick = async () => {
+  if (exportButton.disabled) return;
+  const confirmed = nativeApp && await adultActions.confirm(
+    '要分享這張畫嗎？', '接下來會開啟裝置的分享選單。', '開啟分享選單'
+  );
+  if (nativeApp && (!confirmed || !confirmed())) return;
   finish();
   exportButton.disabled = true;
   exportButton.textContent = '正在準備圖片…';
@@ -295,16 +362,16 @@ exportButton.onclick = async () => {
     preview.src = exportUrl;
     preview.alt = nativeApp ? '完成的畫作' : '完成的畫作，可長按儲存';
     panel.replaceChildren(preview);
-    if (nativeApp) {
+    if (nativeApp && confirmed()) {
       try {
-        await shareArtwork(png);
+        await shareArtwork(png, confirmed);
       } catch {
         const notice = document.createElement('p');
         notice.setAttribute('role', 'status');
         notice.textContent = '暫時無法分享圖片，請再試一次。作品仍在畫布上。';
         panel.append(notice);
       }
-    } else {
+    } else if (!nativeApp) {
       const download = document.createElement('a');
       download.href = exportUrl;
       download.download = '我的小小畫作.png';
@@ -550,7 +617,7 @@ if (document.createElementNS) {
   }
   const testTools = nativeApp && window.Capacitor.isPluginAvailable?.('LocalTestTools') === true;
   rewards = createRewards({board, ink: canvas, getState: () => state, canCelebrate: () => pointer === null && !avatar?.editing,
-    motionArtwork, save, avatar, testTools});
+    motionArtwork, save, avatar, testTools, confirm: adultActions.confirm});
   rewards.resize(view);
   rewards.sync();
   avatar?.start();

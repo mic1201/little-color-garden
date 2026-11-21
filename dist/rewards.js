@@ -126,7 +126,7 @@ function ghostAt({x, y}, scale = 1) {
   return `translate(${x - 28}px,${y - 28}px) scale(${scale})`;
 }
 
-export function createRewards({board, ink, getState, motionArtwork, canCelebrate, save, avatar, testTools = false}) {
+export function createRewards({board, ink, getState, motionArtwork, canCelebrate, save, avatar, testTools = false, confirm}) {
   const hud = board.querySelector('#reward-hud');
   const progress = board.querySelector('#reward-progress');
   const playback = board.querySelector('#reward-playback');
@@ -671,7 +671,9 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     }
   };
   trayButton.onclick = () => setTrayOpen(tray.hidden);
-  resetCollection.onclick = () => {
+  resetCollection.onclick = async () => {
+    const confirmed = await confirm('要重置裝飾品收藏嗎？', '重置後可用「還原收藏」取回這次移除的裝飾品。', '重置收藏');
+    if (!confirmed || !confirmed()) return;
     stop();
     collected = changeRewardCollection(state, false);
     delete trayButton.dataset.new;
@@ -679,7 +681,9 @@ export function createRewards({board, ink, getState, motionArtwork, canCelebrate
     persist();
     restoreCollection.focus();
   };
-  restoreCollection.onclick = () => {
+  restoreCollection.onclick = async () => {
+    const confirmed = await confirm('要還原裝飾品收藏嗎？', '將取回上次重置時移除的裝飾品。', '還原收藏');
+    if (!confirmed || !confirmed()) return;
     finishFlight();
     collected = changeRewardCollection(state, true);
     renderInventory();
