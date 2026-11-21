@@ -1,5 +1,6 @@
 <!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#fff9ed"><meta name="description" content="大大的畫布，小小的想像。適合平板的簡單畫畫與塗色小天地。"><title>小小畫畫花園</title><link rel="stylesheet" href="style.css"></head><body><div class="app"><h1 class="sr-only">小小畫畫花園</h1>
 <main>
+<div id="drawing-test-ad" hidden aria-hidden="true"></div>
 <div class="art-space"><div class="paper-top sr-only"><span id="picture-title">✨ 自由畫</span><span class="paper-hint">用手指或觸控筆畫畫</span></div><div class="paper-frame"><div id="board" class="board"><canvas id="ink" width="1000" height="900" aria-label="畫畫區，用手指或觸控筆拖曳繪畫"></canvas><div id="outline" aria-hidden="true"></div><canvas id="reward-motion" hidden aria-hidden="true"></canvas>
 <svg id="reward-stickers" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 900" role="group" aria-label="畫布上的裝飾品" hidden></svg>
 <div id="reward-hud" hidden>
@@ -150,30 +151,60 @@
 <details class="privacy-policy">
   <summary>隱私權政策</summary>
   <p>小小畫畫花園無須註冊。App 不會將畫作、收藏或設定傳給開發者，也不向兒童索取姓名、聯絡方式或位置。</p>
-  <p id="test-ads-privacy" hidden>這個 Android 測試版可在家長驗證後向 Google 載入測試廣告。Google 可能處理 IP 位址、裝置及廣告互動資訊。回報廣告時可使用裝置的郵件程式傳送廣告回應 ID。</p>
+  <p id="ios-privacy-policy" hidden><a class="tiny" href="https://mic1201.github.io/privacy-ios.html">完整隱私權政策</a></p>
+  <p id="test-ads-privacy" hidden>這個測試版可向 Google 載入測試廣告。Google 可能處理 IP 位址、裝置及廣告互動資訊。<a class="tiny" href="mailto:michael1201op@gmail.com?subject=%E5%B0%8F%E5%B0%8F%E7%95%AB%E7%95%AB%E8%8A%B1%E5%9C%92%EF%BD%9C%E6%B8%AC%E8%A9%A6%E5%BB%A3%E5%91%8A%E5%9B%9E%E5%A0%B1">回報廣告</a></p>
+  <p id="live-ads-privacy" hidden>
+    Android 版使用 Google AdMob 放送適齡情境廣告。Google 可能透過加密連線處理 IP 位址、App 和廣告互動、效能診斷資料，以及 App 組合 ID 等裝置或帳戶識別資訊，用於廣告放送、成效分析及防止詐欺。Android 版已移除 Android 廣告 ID 權限，並將廣告請求標示為兒童使用。
+    <br><a class="tiny" href="https://mic1201.github.io/privacy.html">完整隱私權政策</a> · <a class="tiny" href="mailto:michael1201op@gmail.com?subject=%E5%B0%8F%E5%B0%8F%E7%95%AB%E7%95%AB%E8%8A%B1%E5%9C%92%EF%BD%9C%E5%BB%A3%E5%91%8A%E5%9B%9E%E5%A0%B1">回報廣告</a>
+  </p>
   <p>畫作、收藏與設定保存在裝置上的 App 資料中。清除 App 資料或卸載 App 一般會移除暫存，實際還原取決於裝置的備份設定。</p>
   <p>您可透過系統分享選單自行儲存或傳送作品 PNG。選定的服務依其隱私政策處理作品，已匯出的檔案需在儲存位置刪除。</p>
-  <p id="purchase-privacy" hidden>家長可在「廣告與購買」使用裝置的商店帳號完成或恢復購買。商店處理付款，App 只使用商店回傳的商品與交易資訊判定去廣告權益。</p>
+  <p id="purchase-privacy" hidden>家長可在「廣告與購買」使用裝置的商店帳號完成或恢復購買。商店處理付款，App 只使用商店回傳的商品與交易資訊判定廣告移除權益。</p>
   <p>家長如需協助，可來信至 michael1201op@gmail.com。開發者使用來信信箱及內容處理問題，家長也可以來信請求刪除客服往來。</p>
 </details>
 <button id="purchase-settings" class="action" type="button" hidden>廣告與購買</button>
+<p id="parent-auth-status" class="tiny" role="status"></p>
 <section id="purchase-controls" aria-label="廣告與購買" hidden>
-  <button id="remove-ads" class="action" type="button" disabled>永久移除廣告</button>
+  <button id="remove-ads" class="action" type="button" aria-describedby="purchase-scope" disabled>永久移除全螢幕廣告</button>
+  <p id="purchase-scope" class="tiny">一次買斷。畫畫頁仍可能顯示廣告。</p>
   <button id="restore-purchases" class="action" type="button" disabled>恢復購買</button>
   <p id="purchase-status" class="tiny" role="status"></p>
-  <button id="show-test-ad" class="action" type="button" hidden>查看 Google 測試廣告</button>
-  <p id="test-ad-status" class="tiny" role="status" hidden></p>
+  <div id="drawing-ad-test-controls" hidden>
+    <label for="drawing-ad-test-format">畫板上方廣告格式</label>
+    <select id="drawing-ad-test-format" class="action">
+      <option value="native">原生廣告</option>
+      <option value="banner">固定橫幅（320 × 50）</option>
+    </select>
+  </div>
+  <div id="interstitial-test-controls" hidden>
+    <label for="interstitial-test-mode">全螢幕廣告測試</label>
+    <select id="interstitial-test-mode" class="action" aria-describedby="interstitial-test-status">
+      <option value="store">依 StoreKit 購買狀態</option>
+      <option value="shown">模擬顯示全螢幕廣告</option>
+      <option value="removed">模擬已移除全螢幕廣告</option>
+    </select>
+    <p id="interstitial-test-status" class="tiny" role="status"></p>
+  </div>
+  <button id="parent-pin-settings" class="action" type="button" hidden>設定家長 PIN</button>
+  <button id="parent-pin-remove" class="action" type="button" hidden>改用裝置驗證</button>
 </section>
-<div id="export-preview"></div></dialog>
-<dialog id="parent-gate" aria-labelledby="parent-gate-title">
-  <div class="dialog-title"><h2 id="parent-gate-title">請大人幫忙</h2></div>
-  <form id="parent-gate-form">
-    <label for="parent-gate-answer" id="parent-gate-question"></label>
-    <input id="parent-gate-answer" type="text" inputmode="numeric" pattern="[0-9０-９]{1,3}" maxlength="3" autocomplete="off" required>
-    <p id="parent-gate-status" class="tiny" role="status"></p>
+<div id="export-preview"></div>
+</dialog>
+<dialog id="locked-board-dialog" aria-labelledby="locked-board-title" aria-describedby="locked-board-message">
+  <div class="dialog-title"><h2 id="locked-board-title">這張畫紙上鎖了</h2></div>
+  <p id="locked-board-message">想畫這一張，可以請大人幫忙。</p>
+  <form class="confirm-actions" method="dialog">
+    <button class="action" value="back">回去選畫紙</button>
+    <button id="locked-board-parent" class="action primary" type="button">請大人幫忙</button>
+  </form>
+</dialog>
+<dialog id="adult-confirm" aria-labelledby="adult-confirm-title" aria-describedby="adult-confirm-message">
+  <div class="dialog-title"><h2 id="adult-confirm-title"></h2></div>
+  <p id="adult-confirm-message"></p>
+  <form id="adult-confirm-form">
     <div class="confirm-actions">
-      <button id="parent-gate-cancel" class="action" type="button">取消</button>
-      <button class="action primary" type="submit">繼續</button>
+      <button id="adult-confirm-cancel" class="action" type="button">取消</button>
+      <button id="adult-confirm-submit" class="action primary" type="submit">繼續</button>
     </div>
   </form>
 </dialog>

@@ -223,16 +223,18 @@ export const interactionArtwork = {
       return {scaleX:size,scaleY:size,pivot:[762,262]};
     }
     const launch=pulse(t,1.44,2.69,3.58,5.39);
-    return {dx:wave(t,7)*3*pulse(t,.43,.8,1.49,1.9),dy:-151*launch,angle:-4*launch,pivot:[500,605]};
+    return {dx:wave(t,7)*3*pulse(t,.43,.8,1.49,1.9),dy:-138*launch,angle:-4*launch,pivot:[500,605]};
   }},
   'whale-clean': {pose:t=>({angle:4*wave(t,.27),dy:-17*pulse(t,.75,1.86,2.57,4.45),pivot:[500,506]})},
   'triceratops-v4-clean': {pose:t=>({angle:-7*pulse(t,1.88,2.51,2.62,3.65),pivot:[506,747]})},
   'princess-dress-clean': {pose:t=>({angle:12*wave(t,.55)*pulse(t,.45,1.0,3.84,4.25)+7*pulse(t,4.25,4.64,4.87,5.36),
     scaleX:1+.13*pulse(t,.6,1.4,3.65,4.45),pivot:[500,783]})},
-  sailboat: {pose:t=>({dx:102*pulse(t,2.46,4.71,5,6.35),dy:-5*wave(t,.7),angle:3*wave(t,.71),pivot:[500,688]}),
-    axis:'y', offset:(y,t)=>({x:52*arc(clamp((y-183)/405))*pulse(t,1.87,2.3,4.4,5.63)})},
+  sailboat: {pose:t=>({dx:70*pulse(t,2.46,4.71,5,6.35),dy:-5*wave(t,.7),angle:2.3*wave(t,.71),pivot:[500,688]}),
+    axis:'y', offset:(y,t)=>({
+      x:52*arc(clamp((y-183)/405))*clamp((y-320)/64)*pulse(t,1.87,2.3,4.4,5.63)
+    })},
   'princess-castle-clean': {axis:'y',offset:(y,t)=>({
-    y:-48*clamp((124-y)/63)*pulse(t,3.48,4.46,5.52,6.31)
+    y:-40*clamp((124-y)/63)*pulse(t,3.48,4.46,5.52,6.31)
   })},
   'parrot-cute-clean': {axis:false,pose:t=>flyToHand(t,parrotRest,parrotPerch,.19,14*wave(t,.67))},
   'rabbit-garden-v2-clean': {pose:(t,index)=>{

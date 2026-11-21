@@ -25,6 +25,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
 final class DrawingBridgeViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
-        bridge?.registerPluginInstance(DrawingStorePlugin())
+        let store = DrawingStorePlugin()
+        bridge?.registerPluginInstance(store)
+        #if IOS_ADMOB_TEST
+        bridge?.registerPluginInstance(PaperTestAdsPlugin(store: store))
+        #endif
     }
 }

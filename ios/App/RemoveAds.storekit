@@ -1,0 +1,57 @@
+{
+  "identifier": "5B2A8736",
+  "nonRenewingSubscriptions": [],
+  "products": [
+    {
+      "displayPrice": "60",
+      "familyShareable": false,
+      "internalID": "C71469D2",
+      "localizations": [
+        {
+          "description": "一次買斷，永久移除小小畫畫花園的廣告。",
+          "displayName": "永久移除廣告",
+          "locale": "zh_Hant"
+        },
+        {
+          "description": "Permanently removes ads from Little Color Garden.",
+          "displayName": "Remove Ads",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "remove_ads",
+      "referenceName": "Remove Ads",
+      "type": "NonConsumable"
+    },
+    {
+      "displayPrice": "60",
+      "familyShareable": false,
+      "internalID": "8DDD31FB",
+      "localizations": [
+        {
+          "description": "一次買斷。畫畫頁仍可能顯示廣告。",
+          "displayName": "永久移除全螢幕廣告",
+          "locale": "zh_Hant"
+        },
+        {
+          "description": "One-time purchase. Ads may still appear above the drawing board.",
+          "displayName": "Remove Full-Screen Ads",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "remove_interstitial_ads",
+      "referenceName": "Remove Full-Screen Ads",
+      "type": "NonConsumable"
+    }
+  ],
+  "settings": {
+    "_failTransactionsEnabled": false,
+    "_locale": "zh_TW",
+    "_storefront": "TWN",
+    "_storeKitErrors": []
+  },
+  "subscriptionGroups": [],
+  "version": {
+    "major": 4,
+    "minor": 0
+  }
+}

@@ -1,5 +1,7 @@
 package tw.mic1201.littlecolorgarden;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Base64;
@@ -33,28 +35,35 @@ import java.util.function.Consumer;
 
 @CapacitorPlugin(name = "DrawingStore")
 public final class DrawingStorePlugin extends Plugin {
-    private static final String PRODUCT_ID = "remove_ads";
+    private static final String PRODUCT_ID = "remove_interstitial_ads";
+    private static final String LEGACY_PRODUCT_ID = "remove_ads";
+    private static final String LEGACY_PURCHASED = "legacyPurchased";
     private static final String UNKNOWN = "unknown";
     private static final String PURCHASED = "purchased";
     private static final String NOT_PURCHASED = "notPurchased";
     private static final String PENDING = "pending";
     private static final String UNAVAILABLE = "unavailable";
     private static final String CANCELLED = "cancelled";
+    private static final String VERIFIED_ENTITLEMENT = "verified_removal";
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<Consumer<Boolean>> connectionWaiters = new ArrayList<>();
     private final Set<String> acknowledgingTokens = new HashSet<>();
     private PublicKey publicKey;
+    private SharedPreferences savedPurchases;
     private BillingClient billing;
     private boolean connecting;
     private boolean destroyed;
     private PluginCall checkout;
     private String currentEntitlement = UNKNOWN;
     private int entitlementRevision;
-    private Runnable stopTestAds;
+    private Runnable stopAds;
     private final Runnable checkoutTimeout = () -> finishCheckout(UNAVAILABLE);
 
     @Override
     public void load() {
+        savedPurchases = getContext().getSharedPreferences("drawing_store", Context.MODE_PRIVATE);
+        String saved = savedPurchases.getString(VERIFIED_ENTITLEMENT, UNKNOWN);
+        if (ownsRemoval(saved)) currentEntitlement = saved;
         try {
             String key = getContext().getString(R.string.play_billing_public_key);
             if (key.trim().isEmpty()) return;
@@ -92,14 +101,20 @@ public final class DrawingStorePlugin extends Plugin {
     public void getState(PluginCall call) {
         main.post(() -> connect(ready -> {
             if (!ready) {
-                call.resolve(response(null, UNAVAILABLE));
+                call.resolve(response(currentEntitlement, ownsRemoval(currentEntitlement) ? null : UNAVAILABLE));
                 return;
             }
-            refreshEntitlement(entitlement -> findProduct((product, offer) -> {
-                JSObject result = response(entitlement, offer == null ? UNAVAILABLE : null);
-                if (offer != null) result.put("price", offer.getFormattedPrice());
-                call.resolve(result);
-            }));
+            refreshEntitlement(entitlement -> {
+                if (ownsRemoval(currentEntitlement)) {
+                    call.resolve(response(currentEntitlement, null));
+                    return;
+                }
+                findProduct((product, offer) -> {
+                    JSObject result = response(entitlement, offer == null ? UNAVAILABLE : null);
+                    if (offer != null) result.put("price", offer.getFormattedPrice());
+                    call.resolve(result);
+                });
+            });
         }));
     }
 
@@ -141,25 +156,45 @@ public final class DrawingStorePlugin extends Plugin {
         }));
     }
 
-    void checkTestAdEligibility(boolean simulateUnpurchased, Consumer<Boolean> callback) {
+    void checkInterstitialAdEligibility(boolean allowWhenStoreUnavailable, Consumer<Boolean> callback) {
+        connect(ready -> {
+            if (!ready) {
+                callback.accept(allowWhenStoreUnavailable && !blocksInterstitialAds());
+                return;
+            }
+            refreshEntitlement(state -> callback.accept(
+                NOT_PURCHASED.equals(state) ||
+                (allowWhenStoreUnavailable && UNKNOWN.equals(state) && !blocksInterstitialAds())
+            ));
+        });
+    }
+
+    boolean blocksInterstitialAds() {
+        return ownsRemoval(currentEntitlement) || PENDING.equals(currentEntitlement);
+    }
+
+    void checkDrawingTestAdEligibility(boolean simulateUnpurchased, Consumer<Boolean> callback) {
         connect(ready -> {
             if (!ready) {
                 callback.accept(simulateUnpurchased && UNKNOWN.equals(currentEntitlement));
                 return;
             }
-            refreshEntitlement(state -> callback.accept(
-                NOT_PURCHASED.equals(state) ||
-                (simulateUnpurchased && UNKNOWN.equals(state) && UNKNOWN.equals(currentEntitlement))
-            ));
+            refreshEntitlement(state -> callback.accept(!LEGACY_PURCHASED.equals(state)
+                && !LEGACY_PURCHASED.equals(currentEntitlement)
+                && (!UNKNOWN.equals(state) || (simulateUnpurchased && UNKNOWN.equals(currentEntitlement)))));
         });
     }
 
-    boolean blocksTestAds() {
-        return PURCHASED.equals(currentEntitlement) || PENDING.equals(currentEntitlement);
+    boolean blocksBannerAds() {
+        return LEGACY_PURCHASED.equals(currentEntitlement);
     }
 
-    void onTestAdsBlocked(Runnable listener) {
-        stopTestAds = listener;
+    private static boolean ownsRemoval(String state) {
+        return PURCHASED.equals(state) || LEGACY_PURCHASED.equals(state);
+    }
+
+    void onAdsBlocked(Runnable listener) {
+        stopAds = listener;
     }
 
     private void connect(Consumer<Boolean> callback) {
@@ -202,27 +237,38 @@ public final class DrawingStorePlugin extends Plugin {
                 return;
             }
             if (revisionAtRequest == entitlementRevision) {
-                publish(entitlementFrom(purchases));
+                String state = entitlementFrom(purchases);
+                if (UNKNOWN.equals(state)) {
+                    callback.accept(UNKNOWN);
+                    return;
+                }
+                publish(state);
             }
             callback.accept(currentEntitlement);
         }));
     }
 
     private String entitlementFrom(List<Purchase> purchases) {
-        String entitlement = NOT_PURCHASED;
+        boolean purchased = false;
+        boolean unverified = false;
+        boolean pending = false;
         for (Purchase purchase : purchases) {
-            if (!purchase.getProducts().contains(PRODUCT_ID)) continue;
+            boolean legacy = purchase.getProducts().contains(LEGACY_PRODUCT_ID);
+            if (!legacy && !purchase.getProducts().contains(PRODUCT_ID)) continue;
             if (!verify(purchase)) {
-                entitlement = UNKNOWN;
+                unverified = true;
                 continue;
             }
             if (purchase.getPurchaseState() == Purchase.PurchaseState.PURCHASED) {
                 acknowledge(purchase);
-                return PURCHASED;
+                if (legacy) return LEGACY_PURCHASED;
+                purchased = true;
             }
-            if (purchase.getPurchaseState() == Purchase.PurchaseState.PENDING) entitlement = PENDING;
+            if (purchase.getPurchaseState() == Purchase.PurchaseState.PENDING) pending = true;
         }
-        return entitlement;
+        if (purchased) return PURCHASED;
+        if (unverified) return UNKNOWN;
+        return pending ? PENDING : NOT_PURCHASED;
     }
 
     private boolean verify(Purchase purchase) {
@@ -292,7 +338,9 @@ public final class DrawingStorePlugin extends Plugin {
         if (destroyed) return;
         if (isOk(result) && purchases != null) {
             String state = entitlementFrom(purchases);
-            if (PURCHASED.equals(state) || PENDING.equals(state)) publish(state);
+            if (ownsRemoval(state) || PENDING.equals(state)) {
+                if (!LEGACY_PURCHASED.equals(currentEntitlement) || LEGACY_PURCHASED.equals(state)) publish(state);
+            }
             finishCheckout(NOT_PURCHASED.equals(state) || UNKNOWN.equals(state) ? UNAVAILABLE : state);
         } else if (result.getResponseCode() == BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED) {
             refreshEntitlement(state -> finishCheckout(UNKNOWN.equals(state) ? UNAVAILABLE : state));
@@ -305,7 +353,11 @@ public final class DrawingStorePlugin extends Plugin {
         entitlementRevision++;
         if (state.equals(currentEntitlement)) return;
         currentEntitlement = state;
-        if (stopTestAds != null && blocksTestAds()) stopTestAds.run();
+        SharedPreferences.Editor edits = savedPurchases.edit();
+        if (ownsRemoval(state)) edits.putString(VERIFIED_ENTITLEMENT, state);
+        else edits.remove(VERIFIED_ENTITLEMENT);
+        edits.apply();
+        if (stopAds != null && blocksInterstitialAds()) stopAds.run();
         notifyListeners("entitlementChanged", response(state, null));
     }
 
@@ -314,7 +366,7 @@ public final class DrawingStorePlugin extends Plugin {
         PluginCall call = checkout;
         checkout = null;
         main.removeCallbacks(checkoutTimeout);
-        boolean state = PURCHASED.equals(result) || PENDING.equals(result) || NOT_PURCHASED.equals(result);
+        boolean state = ownsRemoval(result) || PENDING.equals(result) || NOT_PURCHASED.equals(result);
         call.resolve(response(state ? result : null, state ? null : result));
     }
 

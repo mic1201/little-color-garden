@@ -26,6 +26,9 @@ const originalPatterns=[
 ,...richPatterns,halloweenPattern,...islandPatterns];
 const versions = originalPatterns.map(pattern => [...revisedPatterns(pattern).reverse(), pattern]);
 export const patterns = versions.flat();
+export const freeBoardIds = Object.freeze([
+  'blank', 'cat-clean', 'rainbow-clean', 'dinosaur-clean', 'rocket-clean', 'whale-clean',
+]);
 const visibleIds = new Set(versions.map(([latest]) => latest.id).filter(id => id !== 'parrot'));
 
 export function isLegacyPattern(id) {
